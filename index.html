@@ -268,7 +268,6 @@
 
                         if (!nip || nip === '-' || !nama) return;
 
-                        // Pengecekan NIP Ganda
                         let exists = dummyPegawai.some(p => String(p.nip).trim() === nip);
 
                         if (exists) {
@@ -285,7 +284,6 @@
                         }
                     });
 
-                    // Notifikasi jika ada data tertolak
                     if (ditolakNIP.length > 0) {
                         let contohNip = ditolakNIP.slice(0, 5).map(x => `${x.nip} (${x.nama})`).join('<br>');
                         let sisaDitolak = ditolakNIP.length > 5 ? `<br><i>...dan ${ditolakNIP.length - 5} data lainnya.</i>` : '';
@@ -304,7 +302,6 @@
                         Swal.fire('Berhasil!', `${diterimaCount} Data Pegawai ASN berhasil diimpor.`, 'success');
                     }
 
-                    // Simpan ke spreadsheet jika terhubung
                     if (typeof google !== 'undefined' && google.script && google.script.run) {
                         google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
                     }
@@ -325,18 +322,14 @@
             let totalSekolah = dummySekolah.length || 0;
             let totTerlambatMin = 0, totCepatPulangMin = 0, totIzinSakit = 0, totTanpaKet = 0;
             
-            // 1. HITUNG JUMLAH ASN & STATISTIK PER SEKOLAH
             let schoolStats = dummySekolah.map(s => {
-                // Cari jumlah ASN sekolah ini dari Master Pegawai
                 let pegSekolah = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(s.nama.toUpperCase()));
                 let totalASN = pegSekolah.length;
 
-                // Jika Master Pegawai belum terisi, hitung dari data absensi yang ada
                 if (totalASN === 0) {
                     totalASN = dummyAbsensi.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase())).length;
                 }
                 
-                // Mencegah pembagian dengan nol (DIV/0)
                 if (totalASN === 0) totalASN = 1;
 
                 return { 
@@ -353,7 +346,6 @@
                 };
             });
 
-            // Akumulasi total pelanggaran
             dummyAbsensi.forEach(absen => {
                 totTerlambatMin += parseInt(absen.terlambatMin) || 0;
                 totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
@@ -369,14 +361,12 @@
                 }
             });
 
-            // 2. HITUNG RATA-RATA PER ASN
             schoolStats.forEach(s => {
                 s.avgTanpaKet = parseFloat((s.tanpaKet / s.totalASN).toFixed(1));
                 s.avgTerlambatMin = Math.round(s.terlambatMin / s.totalASN);
                 s.avgCepatPulangMin = Math.round(s.cepatPulangMin / s.totalASN);
             });
 
-            // 3. PEMERINGKATAN ADIL BERDASARKAN RATA-RATA PER ASN
             let top5AlpaSekolah = [...schoolStats].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
             let top5TerlambatSekolah = [...schoolStats].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
             let top5CepatPulangSekolah = [...schoolStats].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin).slice(0, 5);
@@ -448,7 +438,7 @@
                     </div>
                 </div>
 
-                <!-- PERINGKAT EVALUASI PRESENSI SEKOLAH (TINGGI PELANGGARAN) -->
+                <!-- PERINGKAT EVALUASI PRESENSI SEKOLAH -->
                 <div class="mb-8">
                     <h3 class="font-bold text-lg text-red-700 flex items-center mb-4">
                         <i class="fa-solid fa-box-archive text-red-600 mr-2"></i> Peringkat Evaluasi Presensi Sekolah (Tinggi Pelanggaran Rata-Rata per ASN)
@@ -505,7 +495,7 @@
                     </div>
                 </div>
 
-                <!-- PERINGKAT KEDISIPLINAN SEKOLAH TERBAIK (TERENDAH PELANGGARAN) -->
+                <!-- PERINGKAT KEDISIPLINAN SEKOLAH TERBAIK -->
                 <div class="mb-8">
                     <h3 class="font-bold text-lg text-emerald-700 flex items-center mb-4">
                         <i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Peringkat Kedisiplinan Sekolah Terbaik (Terendah Pelanggaran Rata-Rata per ASN)
@@ -617,7 +607,6 @@
             }, 100);
         }
 
-        // SERTIFIKAT POPUP DENGAN DOWNLOAD PNG WA
         function tampilkanKartuASN(asnJsonEncoded) {
             let asn = JSON.parse(decodeURIComponent(asnJsonEncoded));
             const bulanIni = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
@@ -866,9 +855,6 @@
             event.target.value = '';
         }
 
-        // ==========================================
-        // SINKRONISASI MASTER PEGAWAI KE REKAP ABSENSI
-        // ==========================================
         function sinkronkanMasterKeAbsensi() {
             let tahunSekarang = new Date().getFullYear();
             let bulanSekarang = new Date().getMonth() + 1; 
@@ -880,7 +866,6 @@
 
                 let indexAbsen = dummyAbsensi.findIndex(a => String(a.nip).trim() === String(peg.nip).trim());
                 if (indexAbsen === -1) {
-                    // Jika pegawai dari Master Data belum ada di dummyAbsensi, masukkan sebagai 0 Hadir (Tanpa Keterangan)
                     dummyAbsensi.push({
                         id: Date.now() + Math.random(),
                         nama: peg.nama,
@@ -895,7 +880,6 @@
                         tanpaKet: hariKerjaAktual
                     });
                 } else {
-                    // Update nama & sekolah terbaru dari Master jika ada perubahan
                     dummyAbsensi[indexAbsen].nama = peg.nama;
                     dummyAbsensi[indexAbsen].sekolah = peg.sekolah;
                     if(idSekolahVal !== "ALL") dummyAbsensi[indexAbsen].sekolahId = idSekolahVal;
@@ -951,7 +935,6 @@
         }
 
         function terapkanFilterAbsen() {
-            // Pastikan data master pegawai disinkronkan terlebih dahulu
             sinkronkanMasterKeAbsensi();
 
             const filterVal = document.getElementById('filterSekolah') ? document.getElementById('filterSekolah').value : "ALL";
@@ -962,7 +945,6 @@
             let bulanSekarang = new Date().getMonth() + 1; 
             let hariKerjaAktual = hitungHariKerjaBulanIni(tahunSekarang, bulanSekarang);
 
-            // Update hitungan Tanpa Keterangan untuk seluruh pegawai
             dummyAbsensi.forEach(p => {
                 p.hariKerja = hariKerjaAktual;
                 let totalTercatat = (p.hadir || 0) + (p.izinSakit || 0);
@@ -1018,7 +1000,6 @@
                     if (jsonData.length > 0) {
                         let riwayatHarian = {}; 
 
-                        // 1. KELOMPOKKAN & FILTER DUPLIKAT BERDASARKAN TANGGAL
                         jsonData.forEach(row => {
                             let nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
                             let namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
@@ -1047,7 +1028,6 @@
                             }
                         });
 
-                        // 2. HITUNG & MASUKKAN KE REKAP TABEL BERDASARKAN ATURAN ASLI
                         Object.values(riwayatHarian).forEach(record => {
                             let hadirBaru = 0;
                             let terlambatBaru = 0;
@@ -1093,7 +1073,6 @@
                             }
                         });
 
-                        // 3. KALKULASI TANPA KETERANGAN & VALIDASI HARI KERJA
                         let peringatanHariKerja = false;
                         let hkOtomatis = hitungHariKerjaBulanIni(new Date().getFullYear(), new Date().getMonth() + 1);
 
@@ -1155,15 +1134,62 @@
             XLSX.writeFile(wb, `Rekap_Absensi_Cabdin_Wil_IV_${new Date().toISOString().slice(0,10)}.xlsx`);
         }
 
-        // MENU LAPORAN INDISIPLINER
+        // ==========================================
+        // MENU LAPORAN INDISIPLINER (DENGAN FILTER BULAN & TAHUN)
+        // ==========================================
         function renderLaporan(container) {
             if(!container) return;
-            let hkOtomatis = hitungHariKerjaBulanIni(new Date().getFullYear(), new Date().getMonth() + 1);
-            let indisipliner = dummyAbsensi.filter(a => (a.tanpaKet && a.tanpaKet > 0) || (a.terlambatMin && a.terlambatMin > 0) || (a.cepatPulangMin && a.cepatPulangMin > 0));
+            
+            let now = new Date();
+            let currentBulan = now.getMonth() + 1;
+            let currentTahun = now.getFullYear();
+
+            let namaBulan = [
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            ];
+
+            let optionBulan = namaBulan.map((b, idx) => {
+                let val = idx + 1;
+                return `<option value="${val}" ${val === currentBulan ? 'selected' : ''}>${b}</option>`;
+            }).join('');
+
+            let tahunList = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+            let optionTahun = tahunList.map(t => {
+                return `<option value="${t}" ${t === currentTahun ? 'selected' : ''}>${t}</option>`;
+            }).join('');
 
             container.innerHTML = `
+                <div class="glass-card p-6 mb-6 flex flex-wrap justify-between items-end bg-red-50/50 border border-red-100 gap-4">
+                    <div class="flex gap-4 items-end flex-wrap">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih Bulan</label>
+                            <select id="filterBulanIndisipliner" class="p-2 border border-slate-300 rounded text-sm w-40 bg-white">
+                                ${optionBulan}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih Tahun</label>
+                            <select id="filterTahunIndisipliner" class="p-2 border border-slate-300 rounded text-sm w-32 bg-white">
+                                ${optionTahun}
+                            </select>
+                        </div>
+                        <button onclick="terapkanFilterIndisipliner()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-filter"></i> Filter Laporan
+                        </button>
+                    </div>
+                    <div class="text-xs text-slate-500 font-medium">
+                        <i class="fa-solid fa-circle-info text-red-500 mr-1"></i> Menampilkan ASN dengan <b>Tanpa Keterangan &ge; 1 Hari</b> (Urut Terbanyak)
+                    </div>
+                </div>
+
                 <div class="glass-card p-6">
-                    <h3 class="font-bold text-slate-700 mb-6">Daftar Pegawai Indisipliner</h3>
+                    <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+                        <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2">
+                            <i class="fa-solid fa-user-xmark text-red-600"></i> Daftar Pegawai Indisipliner
+                        </h3>
+                        <span id="labelPeriodeIndisipliner" class="text-xs font-bold bg-red-100 text-red-800 px-3 py-1 rounded-full"></span>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
@@ -1177,28 +1203,82 @@
                                     <th class="p-3 text-center">Keterlambatan</th>
                                     <th class="p-3 text-center">Cepat Pulang</th>
                                     <th class="p-3 text-center">Izin/Sakit/DL</th>
-                                    <th class="p-3 text-center">Tanpa Ket.</th>
+                                    <th class="p-3 text-center bg-red-800">Tanpa Ket.</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                ${indisipliner.length > 0 ? indisipliner.map((a, i) => `
-                                    <tr class="border-b hover:bg-slate-50 text-sm">
-                                        <td class="p-3 text-center">${i+1}</td>
-                                        <td class="p-3 font-semibold text-slate-800">${a.nama}</td>
-                                        <td class="p-3 text-slate-500">${a.nip}</td>
-                                        <td class="p-3">${a.sekolah}</td>
-                                        <td class="p-3 text-center font-bold text-indigo-600">${hkOtomatis}</td>
-                                        <td class="p-3 text-center font-bold text-blue-600">${a.hadir || 0}</td>
-                                        <td class="p-3 text-center text-orange-600 font-bold">${a.terlambatMin || 0} Mnt</td>
-                                        <td class="p-3 text-center text-yellow-600 font-bold">${a.cepatPulangMin || 0} Mnt</td>
-                                        <td class="p-3 text-center text-emerald-600 font-bold">${a.izinSakit || 0}</td>
-                                        <td class="p-3 text-center text-red-600 font-bold">${a.tanpaKet || 0} Hari</td>
-                                    </tr>`).join('') : '<tr><td colspan="10" class="p-6 text-center text-slate-500">Tidak ada data pegawai indisipliner. Semua tepat waktu!</td></tr>'}
-                            </tbody>
+                            <tbody id="bodyIndisipliner"></tbody>
                         </table>
                     </div>
                 </div>
             `;
+
+            terapkanFilterIndisipliner();
+        }
+
+        function terapkanFilterIndisipliner() {
+            sinkronkanMasterKeAbsensi();
+
+            const elBulan = document.getElementById('filterBulanIndisipliner');
+            const elTahun = document.getElementById('filterTahunIndisipliner');
+            const tbody = document.getElementById('bodyIndisipliner');
+            const labelPeriode = document.getElementById('labelPeriodeIndisipliner');
+
+            if (!tbody) return;
+
+            let selectedMonth = elBulan ? parseInt(elBulan.value) : (new Date().getMonth() + 1);
+            let selectedYear = elTahun ? parseInt(elTahun.value) : new Date().getFullYear();
+
+            let namaBulan = [
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            ];
+
+            if (labelPeriode) {
+                labelPeriode.innerText = `Periode: ${namaBulan[selectedMonth - 1]} ${selectedYear}`;
+            }
+
+            let hkOtomatis = hitungHariKerjaBulanIni(selectedYear, selectedMonth);
+
+            // Hitung ulang Tanpa Keterangan untuk bulan/tahun yang dipilih
+            dummyAbsensi.forEach(p => {
+                p.hariKerja = hkOtomatis;
+                let totalTercatat = (parseInt(p.hadir) || 0) + (parseInt(p.izinSakit) || 0);
+                p.tanpaKet = hkOtomatis - totalTercatat;
+                if (p.tanpaKet < 0) p.tanpaKet = 0;
+            });
+
+            // FILTER: HANYA ASN DENGAN TANPA KETERANGAN >= 1 HARI
+            let filtered = dummyAbsensi.filter(a => (parseInt(a.tanpaKet) || 0) >= 1);
+
+            // URUTKAN: DARI TERBANYAK HINGGA TERKECIL
+            filtered.sort((a, b) => {
+                let tkA = parseInt(a.tanpaKet) || 0;
+                let tkB = parseInt(b.tanpaKet) || 0;
+                if (tkB !== tkA) {
+                    return tkB - tkA; // Terbanyak ke terkecil
+                }
+                return (parseInt(b.terlambatMin) || 0) - (parseInt(a.terlambatMin) || 0);
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-500 font-medium">Tidak ada pegawai yang memiliki Tanpa Keterangan pada periode ${namaBulan[selectedMonth - 1]} ${selectedYear}. Semua hadir/izin penuh.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((a, i) => `
+                <tr class="border-b border-slate-100 hover:bg-red-50/50 text-sm">
+                    <td class="p-3 text-center font-bold text-slate-500">${i + 1}</td>
+                    <td class="p-3 font-semibold text-slate-800">${a.nama}</td>
+                    <td class="p-3 text-slate-500 font-mono text-xs">${a.nip}</td>
+                    <td class="p-3 text-slate-600">${a.sekolah || '-'}</td>
+                    <td class="p-3 text-center font-bold text-indigo-600 bg-indigo-50/50">${hkOtomatis} Hari</td>
+                    <td class="p-3 text-center font-bold text-blue-600">${a.hadir || 0}</td>
+                    <td class="p-3 text-center text-orange-600 font-semibold">${a.terlambatMin || 0} Mnt</td>
+                    <td class="p-3 text-center text-yellow-600 font-semibold">${a.cepatPulangMin || 0} Mnt</td>
+                    <td class="p-3 text-center text-emerald-600 font-semibold">${a.izinSakit || 0}</td>
+                    <td class="p-3 text-center text-red-700 font-extrabold bg-red-100/80">${a.tanpaKet || 0} Hari</td>
+                </tr>
+            `).join('');
         }
     </script>
 </body>
