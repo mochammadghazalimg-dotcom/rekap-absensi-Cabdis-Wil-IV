@@ -325,8 +325,35 @@
             let totalSekolah = dummySekolah.length || 0;
             let totTerlambatMin = 0, totCepatPulangMin = 0, totIzinSakit = 0, totTanpaKet = 0;
             
-            let schoolStats = dummySekolah.map(s => ({ id: s.id, nama: s.nama, terlambatMin: 0, cepatPulangMin: 0, tanpaKet: 0, hadir: 0 }));
+            // 1. HITUNG JUMLAH ASN & STATISTIK PER SEKOLAH
+            let schoolStats = dummySekolah.map(s => {
+                // Cari jumlah ASN sekolah ini dari Master Pegawai
+                let pegSekolah = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(s.nama.toUpperCase()));
+                let totalASN = pegSekolah.length;
 
+                // Jika Master Pegawai belum terisi, hitung dari data absensi yang ada
+                if (totalASN === 0) {
+                    totalASN = dummyAbsensi.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase())).length;
+                }
+                
+                // Mencegah pembagian dengan nol (DIV/0)
+                if (totalASN === 0) totalASN = 1;
+
+                return { 
+                    id: s.id, 
+                    nama: s.nama, 
+                    totalASN: totalASN,
+                    terlambatMin: 0, 
+                    cepatPulangMin: 0, 
+                    tanpaKet: 0, 
+                    hadir: 0,
+                    avgTerlambatMin: 0,
+                    avgCepatPulangMin: 0,
+                    avgTanpaKet: 0
+                };
+            });
+
+            // Akumulasi total pelanggaran
             dummyAbsensi.forEach(absen => {
                 totTerlambatMin += parseInt(absen.terlambatMin) || 0;
                 totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
@@ -342,13 +369,21 @@
                 }
             });
 
-            let top5AlpaSekolah = [...schoolStats].sort((a,b) => b.tanpaKet - a.tanpaKet).slice(0, 5);
-            let top5TerlambatSekolah = [...schoolStats].sort((a,b) => b.terlambatMin - a.terlambatMin).slice(0, 5);
-            let top5CepatPulangSekolah = [...schoolStats].sort((a,b) => b.cepatPulangMin - a.cepatPulangMin).slice(0, 5);
+            // 2. HITUNG RATA-RATA PER ASN
+            schoolStats.forEach(s => {
+                s.avgTanpaKet = parseFloat((s.tanpaKet / s.totalASN).toFixed(1));
+                s.avgTerlambatMin = Math.round(s.terlambatMin / s.totalASN);
+                s.avgCepatPulangMin = Math.round(s.cepatPulangMin / s.totalASN);
+            });
 
-            let best5AlpaSekolah = [...schoolStats].sort((a,b) => a.tanpaKet - b.tanpaKet).slice(0, 5);
-            let best5TerlambatSekolah = [...schoolStats].sort((a,b) => a.terlambatMin - b.terlambatMin).slice(0, 5);
-            let best5CepatPulangSekolah = [...schoolStats].sort((a,b) => a.cepatPulangMin - b.cepatPulangMin).slice(0, 5);
+            // 3. PEMERINGKATAN ADIL BERDASARKAN RATA-RATA PER ASN
+            let top5AlpaSekolah = [...schoolStats].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
+            let top5TerlambatSekolah = [...schoolStats].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
+            let top5CepatPulangSekolah = [...schoolStats].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin).slice(0, 5);
+
+            let best5AlpaSekolah = [...schoolStats].sort((a,b) => a.avgTanpaKet - b.avgTanpaKet).slice(0, 5);
+            let best5TerlambatSekolah = [...schoolStats].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
+            let best5CepatPulangSekolah = [...schoolStats].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
 
             let top5ASN = [...dummyAbsensi].sort((a, b) => {
                 let tanpaKetA = parseInt(a.tanpaKet) || 0; let tanpaKetB = parseInt(b.tanpaKet) || 0;
@@ -413,10 +448,10 @@
                     </div>
                 </div>
 
-                <!-- TAMPILAN 1: INDIKATOR PELANGGARAN SEKOLAH (KARTU MERAH) -->
+                <!-- PERINGKAT EVALUASI PRESENSI SEKOLAH (TINGGI PELANGGARAN) -->
                 <div class="mb-8">
                     <h3 class="font-bold text-lg text-red-700 flex items-center mb-4">
-                        <i class="fa-solid fa-box-archive text-red-600 mr-2"></i> Peringkat Evaluasi Presensi Sekolah (Tinggi Pelanggaran)
+                        <i class="fa-solid fa-box-archive text-red-600 mr-2"></i> Peringkat Evaluasi Presensi Sekolah (Tinggi Pelanggaran Rata-Rata per ASN)
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-red-600">
@@ -427,8 +462,11 @@
                             <ul class="p-2">
                                 ${top5AlpaSekolah.map((item, i) => `
                                     <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <span class="truncate font-medium text-slate-700">${i+1}.${item.nama}</span>
-                                        <span class="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded">${item.tanpaKet} Hari</span>
+                                        <div class="truncate font-medium text-slate-700">
+                                            <span>${i+1}.${item.nama}</span>
+                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.tanpaKet} Hari)</span>
+                                        </div>
+                                        <span class="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTanpaKet} Hari/ASN</span>
                                     </li>`).join('')}
                             </ul>
                         </div>
@@ -440,8 +478,11 @@
                             <ul class="p-2">
                                 ${top5TerlambatSekolah.map((item, i) => `
                                     <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <span class="truncate font-medium text-slate-700">${i+1}.${item.nama}</span>
-                                        <span class="bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded">${item.terlambatMin} Menit</span>
+                                        <div class="truncate font-medium text-slate-700">
+                                            <span>${i+1}.${item.nama}</span>
+                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.terlambatMin} Mnt)</span>
+                                        </div>
+                                        <span class="bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTerlambatMin} Mnt/ASN</span>
                                     </li>`).join('')}
                             </ul>
                         </div>
@@ -453,18 +494,21 @@
                             <ul class="p-2">
                                 ${top5CepatPulangSekolah.map((item, i) => `
                                     <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <span class="truncate font-medium text-slate-700">${i+1}.${item.nama}</span>
-                                        <span class="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded">${item.cepatPulangMin} Menit</span>
+                                        <div class="truncate font-medium text-slate-700">
+                                            <span>${i+1}.${item.nama}</span>
+                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.cepatPulangMin} Mnt)</span>
+                                        </div>
+                                        <span class="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgCepatPulangMin} Mnt/ASN</span>
                                     </li>`).join('')}
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- TAMPILAN 2: INDIKATOR KEDISIPLINAN SEKOLAH (PIALA) -->
+                <!-- PERINGKAT KEDISIPLINAN SEKOLAH TERBAIK (TERENDAH PELANGGARAN) -->
                 <div class="mb-8">
                     <h3 class="font-bold text-lg text-emerald-700 flex items-center mb-4">
-                        <i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Peringkat Kedisiplinan Sekolah Terbaik (Terendah Pelanggaran)
+                        <i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Peringkat Kedisiplinan Sekolah Terbaik (Terendah Pelanggaran Rata-Rata per ASN)
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-emerald-500">
@@ -475,8 +519,11 @@
                             <ul class="p-2">
                                 ${best5AlpaSekolah.map((item, i) => `
                                     <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <span class="truncate font-medium text-slate-700">${i+1}.${item.nama}</span>
-                                        <span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded">${item.tanpaKet} Hari</span>
+                                        <div class="truncate font-medium text-slate-700">
+                                            <span>${i+1}.${item.nama}</span>
+                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.tanpaKet} Hari)</span>
+                                        </div>
+                                        <span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTanpaKet} Hari/ASN</span>
                                     </li>`).join('')}
                             </ul>
                         </div>
@@ -488,8 +535,11 @@
                             <ul class="p-2">
                                 ${best5TerlambatSekolah.map((item, i) => `
                                     <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <span class="truncate font-medium text-slate-700">${i+1}.${item.nama}</span>
-                                        <span class="bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded">${item.terlambatMin} Menit</span>
+                                        <div class="truncate font-medium text-slate-700">
+                                            <span>${i+1}.${item.nama}</span>
+                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.terlambatMin} Mnt)</span>
+                                        </div>
+                                        <span class="bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTerlambatMin} Mnt/ASN</span>
                                     </li>`).join('')}
                             </ul>
                         </div>
@@ -501,8 +551,11 @@
                             <ul class="p-2">
                                 ${best5CepatPulangSekolah.map((item, i) => `
                                     <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <span class="truncate font-medium text-slate-700">${i+1}.${item.nama}</span>
-                                        <span class="bg-cyan-100 text-cyan-700 font-bold px-2 py-0.5 rounded">${item.cepatPulangMin} Menit</span>
+                                        <div class="truncate font-medium text-slate-700">
+                                            <span>${i+1}.${item.nama}</span>
+                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.cepatPulangMin} Mnt)</span>
+                                        </div>
+                                        <span class="bg-cyan-100 text-cyan-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgCepatPulangMin} Mnt/ASN</span>
                                     </li>`).join('')}
                             </ul>
                         </div>
