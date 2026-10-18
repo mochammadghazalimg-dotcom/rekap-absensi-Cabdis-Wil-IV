@@ -36,6 +36,7 @@
         <nav class="flex-1 mt-6">
             <ul class="space-y-1">
                 <li><a onclick="switchView('dashboard')" id="nav-dashboard" class="sidebar-link active flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-chart-line w-6 text-center mr-3"></i> Dashboard Utama</a></li>
+                <li><a onclick="switchView('dataPegawai')" id="nav-dataPegawai" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-users w-6 text-center mr-3"></i> Data Pegawai</a></li>
                 <li><a onclick="switchView('dataSekolah')" id="nav-dataSekolah" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-school w-6 text-center mr-3"></i> Data Sekolah</a></li>
                 <li><a onclick="switchView('rekapAbsen')" id="nav-rekapAbsen" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-calendar-check w-6 text-center mr-3"></i> Rekap Absen</a></li>
                 <li><a onclick="switchView('laporanIndisipliner')" id="nav-laporanIndisipliner" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-user-xmark w-6 text-center mr-3"></i> Lap. Indisipliner</a></li>
@@ -72,6 +73,7 @@
 
         let dummySekolah = [...defaultSekolah];
         let dummyAbsensi = [];      
+        let dummyPegawai = []; // MASTER DATA PEGAWAI ASN
         let currentChart = null;
         let currentPieChart = null;
 
@@ -109,6 +111,7 @@
                         if (db) {
                             if (db.sekolah && db.sekolah.length > 0) dummySekolah = db.sekolah;
                             if (db.absensi && db.absensi.length > 0) dummyAbsensi = db.absensi;
+                            if (db.pegawai && db.pegawai.length > 0) dummyPegawai = db.pegawai;
                         }
                         switchView('dashboard');
                     })
@@ -148,6 +151,7 @@
             const pageTitle = document.getElementById('page-title');
 
             if (viewId === 'dashboard') { pageTitle.innerText = "Dashboard Utama"; renderDashboard(contentArea); }
+            else if (viewId === 'dataPegawai') { pageTitle.innerText = "Data Pegawai ASN"; renderDataPegawai(contentArea); }
             else if (viewId === 'dataSekolah') { pageTitle.innerText = "Data Sekolah"; renderDataSekolah(contentArea); }
             else if (viewId === 'rekapAbsen') { pageTitle.innerText = "Rekap Absen Sekolah"; renderRekapAbsen(contentArea); }
             else if (viewId === 'laporanIndisipliner') { pageTitle.innerText = "Laporan Indisipliner"; renderLaporan(contentArea); }
@@ -164,9 +168,160 @@
             }, 100);
         }
 
+        // ==========================================
+        // MENU 1: DATA PEGAWAI (MASTER DATA)
+        // ==========================================
+        function renderDataPegawai(container) {
+            if(!container) return;
+            
+            let sekolahOptions = `<option value="ALL">Semua Sekolah</option>` + 
+                dummySekolah.map(s => `<option value="${s.nama}">${s.nama}</option>`).join('');
+
+            container.innerHTML = `
+                <div class="glass-card p-6">
+                    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-lg">Master Data Pegawai ASN</h3>
+                            <p class="text-xs text-slate-500">Basis data acuan pegawai untuk presensi seluruh sekolah Cabdin Wil. IV</p>
+                        </div>
+                        <div class="flex gap-2 flex-wrap items-center">
+                            <select id="filterSekolahPegawai" onchange="renderTabelPegawai()" class="p-2 border border-slate-300 rounded text-sm min-w-[200px]">
+                                ${sekolahOptions}
+                            </select>
+                            <input type="file" id="uploadCSVPegawai" accept=".csv" class="hidden" onchange="prosesUploadPegawaiCSV(event)" />
+                            <button onclick="document.getElementById('uploadCSVPegawai').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-file-csv"></i> Unggah CSV Pegawai
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-bold">
+                                    <th class="p-3 text-center w-12 border-b">No</th>
+                                    <th class="p-3 border-b">NIP</th>
+                                    <th class="p-3 border-b">Nama Pegawai</th>
+                                    <th class="p-3 border-b">Sekolah</th>
+                                    <th class="p-3 text-center border-b">Foto Acuan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bodyPegawai"></tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            renderTabelPegawai();
+        }
+
+        function renderTabelPegawai() {
+            const filterVal = document.getElementById('filterSekolahPegawai') ? document.getElementById('filterSekolahPegawai').value : "ALL";
+            const tbody = document.getElementById('bodyPegawai');
+            if(!tbody) return;
+
+            let filtered = dummyPegawai;
+            if (filterVal !== "ALL") {
+                filtered = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(filterVal.toUpperCase()));
+            }
+
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 text-sm">Belum ada data pegawai. Silakan unggah CSV Data Pegawai.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((p, i) => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
+                    <td class="p-3 text-center text-slate-500">${i+1}</td>
+                    <td class="p-3 font-semibold text-slate-800">${p.nip}</td>
+                    <td class="p-3 font-semibold text-blue-950">${p.nama}</td>
+                    <td class="p-3 text-slate-600">${p.sekolah || '-'}</td>
+                    <td class="p-3 text-center">
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+                            ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'Tersedia' : 'Belum Ada'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function prosesUploadPegawaiCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (!results.data || results.data.length === 0) {
+                        Swal.fire('Error', 'File CSV kosong atau format tidak sesuai.', 'error');
+                        return;
+                    }
+
+                    let ditolakNIP = [];
+                    let diterimaCount = 0;
+
+                    results.data.forEach(row => {
+                        let nip = String(row['nip'] || row['NIP'] || '').trim();
+                        let nama = String(row['name'] || row['nama'] || row['Nama'] || row['Nama Pegawai'] || '').trim();
+                        let sekolah = String(row['school_name'] || row['sekolah'] || row['Sekolah'] || '').trim();
+                        let photoUploaded = row['photo_uploaded'] || 'False';
+
+                        if (!nip || nip === '-' || !nama) return;
+
+                        // Pengecekan NIP Ganda
+                        let exists = dummyPegawai.some(p => String(p.nip).trim() === nip);
+
+                        if (exists) {
+                            ditolakNIP.push({ nip: nip, nama: nama });
+                        } else {
+                            dummyPegawai.push({
+                                id: Date.now() + Math.random(),
+                                nip: nip,
+                                nama: nama,
+                                sekolah: sekolah,
+                                photo_uploaded: photoUploaded
+                            });
+                            diterimaCount++;
+                        }
+                    });
+
+                    // Notifikasi jika ada data tertolak
+                    if (ditolakNIP.length > 0) {
+                        let contohNip = ditolakNIP.slice(0, 5).map(x => `${x.nip} (${x.nama})`).join('<br>');
+                        let sisaDitolak = ditolakNIP.length > 5 ? `<br><i>...dan ${ditolakNIP.length - 5} data lainnya.</i>` : '';
+
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Peringatan NIP Ganda!',
+                            html: `<div class="text-left text-xs text-slate-700">
+                                <p class="font-bold text-emerald-600 mb-1">✔ ${diterimaCount} Pegawai baru berhasil ditambahkan.</p>
+                                <p class="font-bold text-red-600 mb-2">✖ ${ditolakNIP.length} Pegawai tertolak karena NIP sudah terdaftar:</p>
+                                <div class="bg-slate-100 p-2 rounded border border-slate-300 font-mono text-[11px] max-h-36 overflow-y-auto">${contohNip}${sisaDitolak}</div>
+                            </div>`,
+                            confirmButtonColor: '#3b82f6'
+                        });
+                    } else {
+                        Swal.fire('Berhasil!', `${diterimaCount} Data Pegawai ASN berhasil diimpor.`, 'success');
+                    }
+
+                    // Simpan ke spreadsheet jika terhubung
+                    if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+                    }
+
+                    renderDataPegawai(document.getElementById('content-area'));
+                },
+                error: function(err) {
+                    Swal.fire('Error', 'Gagal memproses file CSV Pegawai.', 'error');
+                }
+            });
+
+            event.target.value = '';
+        }
+
         function renderDashboard(container) {
             if(!container) return;
-            let totalPegawai = dummyAbsensi.length || 0;
+            let totalPegawai = dummyPegawai.length > 0 ? dummyPegawai.length : (dummyAbsensi.length || 0);
             let totalSekolah = dummySekolah.length || 0;
             let totTerlambatMin = 0, totCepatPulangMin = 0, totIzinSakit = 0, totTanpaKet = 0;
             
@@ -195,7 +350,6 @@
             let best5TerlambatSekolah = [...schoolStats].sort((a,b) => a.terlambatMin - b.terlambatMin).slice(0, 5);
             let best5CepatPulangSekolah = [...schoolStats].sort((a,b) => a.cepatPulangMin - b.cepatPulangMin).slice(0, 5);
 
-            // PERHITUNGAN TOP 5 ASN TELADAN
             let top5ASN = [...dummyAbsensi].sort((a, b) => {
                 let tanpaKetA = parseInt(a.tanpaKet) || 0; let tanpaKetB = parseInt(b.tanpaKet) || 0;
                 let telatA = parseInt(a.terlambatMin) || 0; let telatB = parseInt(b.terlambatMin) || 0;
@@ -625,7 +779,6 @@
                         jsonData.forEach(row => {
                         let keys = Object.keys(row);
                             
-                            // Deteksi Header Otomatis Kebal Spasi Tersembunyi
                             let keyNama = keys.find(k => k.trim().toLowerCase() === 'nama sekolah' || k.trim().toLowerCase() === 'sekolah');
                             let nama = keyNama ? String(row[keyNama]).trim() : '';
                             if(!nama) return;
@@ -633,7 +786,6 @@
                             let keyNPSN = keys.find(k => k.trim().toLowerCase() === 'npsn');
                             let npsn = keyNPSN ? String(row[keyNPSN]).trim() : '-';
 
-                            // Deteksi Header yang Mengandung kata 'kepala' atau 'kepsek'
                             let keyKepsek = keys.find(k => k.trim().toLowerCase().includes('kepala') || k.trim().toLowerCase().includes('kepsek'));
                             let kepsek = keyKepsek ? String(row[keyKepsek]).trim() : '-';
 
@@ -659,6 +811,43 @@
             };
             reader.readAsArrayBuffer(file);
             event.target.value = '';
+        }
+
+        // ==========================================
+        // SINKRONISASI MASTER PEGAWAI KE REKAP ABSENSI
+        // ==========================================
+        function sinkronkanMasterKeAbsensi() {
+            let tahunSekarang = new Date().getFullYear();
+            let bulanSekarang = new Date().getMonth() + 1; 
+            let hariKerjaAktual = hitungHariKerjaBulanIni(tahunSekarang, bulanSekarang);
+
+            dummyPegawai.forEach(peg => {
+                let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
+                let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
+
+                let indexAbsen = dummyAbsensi.findIndex(a => String(a.nip).trim() === String(peg.nip).trim());
+                if (indexAbsen === -1) {
+                    // Jika pegawai dari Master Data belum ada di dummyAbsensi, masukkan sebagai 0 Hadir (Tanpa Keterangan)
+                    dummyAbsensi.push({
+                        id: Date.now() + Math.random(),
+                        nama: peg.nama,
+                        nip: peg.nip,
+                        sekolah: peg.sekolah,
+                        sekolahId: idSekolahVal,
+                        hariKerja: hariKerjaAktual,
+                        hadir: 0,
+                        terlambatMin: 0,
+                        cepatPulangMin: 0,
+                        izinSakit: 0,
+                        tanpaKet: hariKerjaAktual
+                    });
+                } else {
+                    // Update nama & sekolah terbaru dari Master jika ada perubahan
+                    dummyAbsensi[indexAbsen].nama = peg.nama;
+                    dummyAbsensi[indexAbsen].sekolah = peg.sekolah;
+                    if(idSekolahVal !== "ALL") dummyAbsensi[indexAbsen].sekolahId = idSekolahVal;
+                }
+            });
         }
 
         // MENU REKAP ABSENSI
@@ -709,23 +898,40 @@
         }
 
         function terapkanFilterAbsen() {
+            // Pastikan data master pegawai disinkronkan terlebih dahulu
+            sinkronkanMasterKeAbsensi();
+
             const filterVal = document.getElementById('filterSekolah') ? document.getElementById('filterSekolah').value : "ALL";
             const tbody = document.getElementById('bodyAbsen');
             if(!tbody) return;
-            
-            let filtered = dummyAbsensi;
-            if (filterVal !== "ALL") {
-                filtered = dummyAbsensi.filter(a => String(a.sekolahId) === String(filterVal) || String(a.sekolah).toUpperCase().includes((dummySekolah.find(s=>String(s.id)===String(filterVal))?.nama || '').toUpperCase()));
-            }
-
-            if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-500">Kosong. Silakan unggah log absensi.</td></tr>`;
-                return;
-            }
 
             let tahunSekarang = new Date().getFullYear();
             let bulanSekarang = new Date().getMonth() + 1; 
             let hariKerjaAktual = hitungHariKerjaBulanIni(tahunSekarang, bulanSekarang);
+
+            // Update hitungan Tanpa Keterangan untuk seluruh pegawai
+            dummyAbsensi.forEach(p => {
+                p.hariKerja = hariKerjaAktual;
+                let totalTercatat = (p.hadir || 0) + (p.izinSakit || 0);
+                p.tanpaKet = hariKerjaAktual - totalTercatat;
+                if (p.tanpaKet < 0) p.tanpaKet = 0;
+            });
+
+            let filtered = dummyAbsensi;
+            if (filterVal !== "ALL") {
+                let sekolahObj = dummySekolah.find(s => String(s.id) === String(filterVal));
+                let nmSekolah = sekolahObj ? sekolahObj.nama.toUpperCase() : "";
+                
+                filtered = dummyAbsensi.filter(a => 
+                    String(a.sekolahId) === String(filterVal) || 
+                    String(a.sekolah).toUpperCase().includes(nmSekolah)
+                );
+            }
+
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-500">Kosong. Silakan unggah Data Pegawai atau Log Absensi.</td></tr>`;
+                return;
+            }
 
             tbody.innerHTML = filtered.map((a, i) => {
                 let nmSekolah = a.sekolah || (dummySekolah.find(s => String(s.id) === String(a.sekolahId))?.nama || '-');
@@ -757,7 +963,7 @@
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {raw: false});
 
                     if (jsonData.length > 0) {
-                        let riwayatHarian = {}; // Penampung untuk mencegah double absen per hari
+                        let riwayatHarian = {}; 
 
                         // 1. KELOMPOKKAN & FILTER DUPLIKAT BERDASARKAN TANGGAL
                         jsonData.forEach(row => {
@@ -770,7 +976,6 @@
                             let jam = String(row['jam'] || row['Jam'] || '').trim();
                             let status = String(row['status'] || row['Status'] || '').trim().toUpperCase();
 
-                            // Buat Kunci Unik (Contoh: 19700731_2026-10-09)
                             let key = nipPegawai + "_" + tanggal;
 
                             if (!riwayatHarian[key]) {
@@ -780,7 +985,6 @@
                                 };
                             }
 
-                            // Ambil data PERTAMA, abaikan data absen duplikat di hari yang sama
                             if (status === 'DATANG' && riwayatHarian[key].datang === null) {
                                 riwayatHarian[key].datang = jam;
                             } else if (status === 'PULANG' && riwayatHarian[key].pulang === null) {
@@ -790,44 +994,37 @@
                             }
                         });
 
-                        // 2. HITUNG & MASUKKAN KE REKAP TABEL BERDASARKAN ATURAN BARU
+                        // 2. HITUNG & MASUKKAN KE REKAP TABEL BERDASARKAN ATURAN ASLI
                         Object.values(riwayatHarian).forEach(record => {
                             let hadirBaru = 0;
                             let terlambatBaru = 0;
                             let cptPulangBaru = 0;
 
-                            // Aturan Hadir: Jika ada jam datang ATAU pulang
                             if (record.datang !== null || record.pulang !== null) {
                                 hadirBaru = 1;
                             }
                             
-                            // Hitung Menit Keterlambatan (Batas 07:45)
                             if (record.datang !== null) {
-                                // Jika ada absen masuk, hitung selisih dari 07:45
                                 if (record.datang > "07:45:00") {
                                     let [jamD, mntD] = record.datang.split(':').map(Number);
                                     terlambatBaru = ((jamD * 60) + mntD) - ((7 * 60) + 45);
-                                    if (terlambatBaru < 0) terlambatBaru = 0; // Jaga-jaga
+                                    if (terlambatBaru < 0) terlambatBaru = 0;
                                 }
                             } else if (record.pulang !== null) {
-                                // TAMBAHAN BARU: Tidak absen masuk, TAPI ada absen pulang
-                                // Keterlambatan dihitung full dari 07:45 ke 16:00 (495 Menit)
                                 terlambatBaru = 495; 
                             }
                             
-                            // Hitung Menit Cepat Pulang (Batas 16:00)
                             if (record.pulang !== null && record.pulang < "16:00:00") {
                                 let [jamP, mntP] = record.pulang.split(':').map(Number);
                                 cptPulangBaru = ((16 * 60) + 0) - ((jamP * 60) + mntP);
-                                if (cptPulangBaru < 0) cptPulangBaru = 0; // Jaga-jaga
+                                if (cptPulangBaru < 0) cptPulangBaru = 0;
                             }
 
-                            // Dapatkan Info Sekolah
                             let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes(record.sekolah.toUpperCase()));
                             let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
                             let namaSekolahFinal = matchSekolah ? matchSekolah.nama : record.sekolah;
 
-                            let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip) === record.nip);
+                            let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
                             if (indexPegawai !== -1) {
                                 dummyAbsensi[indexPegawai].hadir += hadirBaru;
                                 dummyAbsensi[indexPegawai].terlambatMin += terlambatBaru;
@@ -837,7 +1034,7 @@
                                 dummyAbsensi.push({
                                     id: Date.now() + Math.random(),
                                     nama: record.nama, nip: record.nip, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
-                                    hariKerja: 22, // Asumsi standar 22 Hari Kerja
+                                    hariKerja: 22,
                                     hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit, tanpaKet: 0
                                 });
                             }
@@ -845,18 +1042,19 @@
 
                         // 3. KALKULASI TANPA KETERANGAN & VALIDASI HARI KERJA
                         let peringatanHariKerja = false;
+                        let hkOtomatis = hitungHariKerjaBulanIni(new Date().getFullYear(), new Date().getMonth() + 1);
+
                         dummyAbsensi.forEach(p => {
+                            p.hariKerja = hkOtomatis;
                             let totalTercatat = p.hadir + p.izinSakit;
                             p.tanpaKet = p.hariKerja - totalTercatat;
                             
-                            // Jika total Tercatat melebih Hari Kerja, berikan peringatan
                             if (p.tanpaKet < 0) {
-                                p.tanpaKet = 0; // Cegah nilai minus
+                                p.tanpaKet = 0;
                                 peringatanHariKerja = true;
                             }
                         });
                         
-                        // Menampilkan Peringatan Jika Ada Ketidaksesuaian Hari Kerja
                         if (peringatanHariKerja) {
                             Swal.fire({
                                 icon: 'warning',
