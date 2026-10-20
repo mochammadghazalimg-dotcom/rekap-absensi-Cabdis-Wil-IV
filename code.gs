@@ -67,7 +67,30 @@ function ambilSemuaDataFromSheet() {
       }
     }
 
-    return { sekolah: dataSekolah, absensi: dataAbsensi, pegawai: dataPegawai };
+  // 4. Data Log Harian (Tab: Log_Harian)
+    let sheetLog = ss.getSheetByName('Log_Harian');
+    let dataLogHarian = [];
+    if (sheetLog) {
+      let raw = sheetLog.getDataRange().getValues();
+      if (raw.length > 1) {
+        raw.shift(); // Hapus Header
+        dataLogHarian = raw.filter(row => row[0]).map(row => ({
+          nip: String(row[0] || '').trim(),
+          nama: String(row[1] || '').trim(),
+          sekolah: String(row[2] || '').trim(),
+          tanggalStr: String(row[3] || '').trim(),
+          yyyy: parseInt(row[4]) || 0,
+          mm: parseInt(row[5]) || 0,
+          dd: parseInt(row[6]) || 0,
+          hadir: parseInt(row[7]) || 0,
+          terlambatMin: parseInt(row[8]) || 0,
+          cepatPulangMin: parseInt(row[9]) || 0,
+          izinSakit: parseInt(row[10]) || 0
+        }));
+      }
+    }
+
+    return { sekolah: dataSekolah, absensi: dataAbsensi, pegawai: dataPegawai, logHarian: dataLogHarian };
   } catch(err) {
     return { error: err.message, sekolah: [], absensi: [], pegawai: [] };
   }
@@ -118,6 +141,23 @@ function simpanRekapAbsenKeSheet(listAbsensi) {
       listAbsensi.forEach(a => rows.push([a.nip, a.nama, a.sekolah, a.hariKerja || 0, a.hadir, a.terlambatMin, a.cepatPulangMin, a.izinSakit, a.tanpaKet]));
     }
     sheet.getRange(1, 1, rows.length, 9).setValues(rows);
+    return "OK";
+  } catch(e) {
+    return "Error: " + e.message;
+  }
+}
+
+// --- SIMPAN LOG HARIAN KE SPREADSHEET ---
+function simpanLogHarianKeSheet(listLog) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheet = ss.getSheetByName('Log_Harian') || ss.insertSheet('Log_Harian');
+    sheet.clearContents();
+    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tanggal', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL']];
+    if (listLog && listLog.length > 0) {
+      listLog.forEach(l => rows.push([l.nip, l.nama, l.sekolah, l.tanggalStr, l.yyyy, l.mm, l.dd, l.hadir, l.terlambatMin, l.cepatPulangMin, l.izinSakit]));
+    }
+    sheet.getRange(1, 1, rows.length, 11).setValues(rows);
     return "OK";
   } catch(e) {
     return "Error: " + e.message;
