@@ -1187,16 +1187,26 @@
                                 if (cptPulangBaru < 0) cptPulangBaru = 0;
                             }
 
-                            let dateParts = record.tanggal.split(/[-/]/);
+                            let dateStr = record.tanggal.toString().trim().split(' ')[0]; 
+                            let dateParts = dateStr.split(/[-/.,]/); 
+
                             let yyyy = new Date().getFullYear();
                             let mm = new Date().getMonth() + 1;
                             let dd = 1;
 
-                            if (dateParts.length === 3) {
+                            if (dateParts.length >= 3) {
                                 if (dateParts[0].length === 4) {
                                     yyyy = parseInt(dateParts[0]); mm = parseInt(dateParts[1]); dd = parseInt(dateParts[2]);
                                 } else {
                                     dd = parseInt(dateParts[0]); mm = parseInt(dateParts[1]); yyyy = parseInt(dateParts[2]);
+                                }
+                            } else {
+                                // Penanganan mundur (fallback) jika format tanggal unik/bawaan JS
+                                let parsedDate = new Date(record.tanggal);
+                                if (!isNaN(parsedDate.getTime())) {
+                                    yyyy = parsedDate.getFullYear();
+                                    mm = parsedDate.getMonth() + 1;
+                                    dd = parsedDate.getDate();
                                 }
                             }
 
