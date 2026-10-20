@@ -1057,9 +1057,29 @@
                     };
                 });
             } else {
+                // PERBAIKAN: Menghitung ulang rekap bulanan dinamis langsung dari dummyLogHarian agar tidak ganda
                 dummyAbsensi.forEach(p => {
+                    let logsBulanIni = dummyLogHarian.filter(l => 
+                        String(l.nip).trim() === String(p.nip).trim() && 
+                        parseInt(l.mm) === filterBlnVal && 
+                        parseInt(l.yyyy) === filterThnVal
+                    );
+
+                    let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                    logsBulanIni.forEach(log => {
+                        totHadir += (parseInt(log.hadir) || 0);
+                        totTelat += (parseInt(log.terlambatMin) || 0);
+                        totCepat += (parseInt(log.cepatPulangMin) || 0);
+                        totIzin += (parseInt(log.izinSakit) || 0);
+                    });
+
+                    p.hadir = totHadir;
+                    p.terlambatMin = totTelat;
+                    p.cepatPulangMin = totCepat;
+                    p.izinSakit = totIzin;
                     p.hariKerja = hkOtomatis;
-                    let totalTercatat = (parseInt(p.hadir) || 0) + (parseInt(p.izinSakit) || 0);
+                    
+                    let totalTercatat = totHadir + totIzin;
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -1298,9 +1318,29 @@
                     };
                 });
             } else {
+                // PERBAIKAN: Excel juga mengambil rekap secara dinamis
                 dummyAbsensi.forEach(p => {
+                    let logsBulanIni = dummyLogHarian.filter(l => 
+                        String(l.nip).trim() === String(p.nip).trim() && 
+                        parseInt(l.mm) === filterBlnVal && 
+                        parseInt(l.yyyy) === filterThnVal
+                    );
+
+                    let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                    logsBulanIni.forEach(log => {
+                        totHadir += (parseInt(log.hadir) || 0);
+                        totTelat += (parseInt(log.terlambatMin) || 0);
+                        totCepat += (parseInt(log.cepatPulangMin) || 0);
+                        totIzin += (parseInt(log.izinSakit) || 0);
+                    });
+
+                    p.hadir = totHadir;
+                    p.terlambatMin = totTelat;
+                    p.cepatPulangMin = totCepat;
+                    p.izinSakit = totIzin;
                     p.hariKerja = hkOtomatis;
-                    let totalTercatat = (parseInt(p.hadir) || 0) + (parseInt(p.izinSakit) || 0);
+                    
+                    let totalTercatat = totHadir + totIzin;
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
