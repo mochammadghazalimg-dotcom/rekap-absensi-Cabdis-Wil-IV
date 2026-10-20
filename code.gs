@@ -104,7 +104,7 @@ function simpanDataPegawaiKeSheet(listPegawai) {
     sheet.clearContents();
     let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Foto_Acuan']];
     if (listPegawai && listPegawai.length > 0) {
-      listPegawai.forEach(p => rows.push([p.nip, p.nama, p.sekolah, p.photo_uploaded || 'False']));
+      listPegawai.forEach(p => rows.push(["'" + p.nip, p.nama, p.sekolah, p.photo_uploaded || 'False']));
     }
     sheet.getRange(1, 1, rows.length, 4).setValues(rows);
     return "OK";
@@ -138,7 +138,7 @@ function simpanRekapAbsenKeSheet(listAbsensi) {
     sheet.clearContents();
     let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Hari_Kerja', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL', 'Tanpa_Ket']];
     if (listAbsensi && listAbsensi.length > 0) {
-      listAbsensi.forEach(a => rows.push([a.nip, a.nama, a.sekolah, a.hariKerja || 0, a.hadir, a.terlambatMin, a.cepatPulangMin, a.izinSakit, a.tanpaKet]));
+      listAbsensi.forEach(a => rows.push(["'" + a.nip, a.nama, a.sekolah, a.hariKerja || 0, a.hadir, a.terlambatMin, a.cepatPulangMin, a.izinSakit, a.tanpaKet]));
     }
     sheet.getRange(1, 1, rows.length, 9).setValues(rows);
     return "OK";
@@ -155,7 +155,7 @@ function simpanLogHarianKeSheet(listLog) {
     sheet.clearContents();
     let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tanggal', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL']];
     if (listLog && listLog.length > 0) {
-      listLog.forEach(l => rows.push([l.nip, l.nama, l.sekolah, l.tanggalStr, l.yyyy, l.mm, l.dd, l.hadir, l.terlambatMin, l.cepatPulangMin, l.izinSakit]));
+      listLog.forEach(l => rows.push(["'" + l.nip, l.nama, l.sekolah, l.tanggalStr, l.yyyy, l.mm, l.dd, l.hadir, l.terlambatMin, l.cepatPulangMin, l.izinSakit]));
     }
     sheet.getRange(1, 1, rows.length, 11).setValues(rows);
     return "OK";
