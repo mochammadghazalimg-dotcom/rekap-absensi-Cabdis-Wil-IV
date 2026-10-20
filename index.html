@@ -375,16 +375,27 @@
             let best5TerlambatSekolah = [...schoolStats].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
             let best5CepatPulangSekolah = [...schoolStats].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
 
-            let top5ASN = [...dummyAbsensi].sort((a, b) => {
+            // ALGORITMA TELADAN PRESENSI BARU:
+            // 1. Hadir terbanyak
+            // 2. Tanpa Ket (Alpa) tersedikit
+            // 3. Izin/Sakit/DL tersedikit
+            // 4. Keterlambatan tersedikit
+            // 5. Cepat Pulang tersedikit
+            let candidatesASN = dummyAbsensi.filter(a => (parseInt(a.hadir) || 0) > 0);
+            if (candidatesASN.length === 0) candidatesASN = [...dummyAbsensi];
+
+            let top5ASN = candidatesASN.sort((a, b) => {
+                let hadirA = parseInt(a.hadir) || 0; let hadirB = parseInt(b.hadir) || 0;
                 let tanpaKetA = parseInt(a.tanpaKet) || 0; let tanpaKetB = parseInt(b.tanpaKet) || 0;
+                let izinA = parseInt(a.izinSakit) || 0; let izinB = parseInt(b.izinSakit) || 0;
                 let telatA = parseInt(a.terlambatMin) || 0; let telatB = parseInt(b.terlambatMin) || 0;
                 let cepatA = parseInt(a.cepatPulangMin) || 0; let cepatB = parseInt(b.cepatPulangMin) || 0;
-                let hadirA = parseInt(a.hadir) || 0; let hadirB = parseInt(b.hadir) || 0;
 
-                if (tanpaKetA !== tanpaKetB) return tanpaKetA - tanpaKetB; 
-                if (telatA !== telatB) return telatA - telatB;             
-                if (cepatA !== cepatB) return cepatA - cepatB;             
-                return hadirB - hadirA;                                    
+                if (hadirB !== hadirA) return hadirB - hadirA;             // 1. Hadir terbanyak
+                if (tanpaKetA !== tanpaKetB) return tanpaKetA - tanpaKetB; // 2. Tanpa Ket (Alpa) tersedikit
+                if (izinA !== izinB) return izinA - izinB;                 // 3. Izin/Sakit/DL tersedikit
+                if (telatA !== telatB) return telatA - telatB;             // 4. Keterlambatan tersedikit
+                return cepatA - cepatB;                                    // 5. Cepat Pulang tersedikit
             }).slice(0, 5);
 
             const bulanIni = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
@@ -1037,6 +1048,7 @@
                                 hadirBaru = 1;
                             }
                             
+                            // BATAS JAM DATANG DITETAPKAN DI 08:00
                             if (record.datang !== null) {
                                 if (record.datang > "08:00:00") {
                                     let [jamD, mntD] = record.datang.split(':').map(Number);
@@ -1135,7 +1147,7 @@
         }
 
         // ==========================================
-        // MENU LAPORAN INDISIPLINER (DENGAN FILTER BULAN & TAHUN)
+        // MENU LAPORAN INDISIPLINER (DENGAN EXPORT EXCEL & FILTER PERIODE)
         // ==========================================
         function renderLaporan(container) {
             if(!container) return;
@@ -1176,6 +1188,9 @@
                         </div>
                         <button onclick="terapkanFilterIndisipliner()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
                             <i class="fa-solid fa-filter"></i> Filter Laporan
+                        </button>
+                        <button onclick="downloadExcelIndisipliner()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-file-excel"></i> Export Excel
                         </button>
                     </div>
                     <div class="text-xs text-slate-500 font-medium">
@@ -1279,6 +1294,63 @@
                     <td class="p-3 text-center text-red-700 font-extrabold bg-red-100/80">${a.tanpaKet || 0} Hari</td>
                 </tr>
             `).join('');
+        }
+
+        function downloadExcelIndisipliner() {
+            sinkronkanMasterKeAbsensi();
+
+            const elBulan = document.getElementById('filterBulanIndisipliner');
+            const elTahun = document.getElementById('filterTahunIndisipliner');
+
+            let selectedMonth = elBulan ? parseInt(elBulan.value) : (new Date().getMonth() + 1);
+            let selectedYear = elTahun ? parseInt(elTahun.value) : new Date().getFullYear();
+
+            let namaBulan = [
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            ];
+
+            let hkOtomatis = hitungHariKerjaBulanIni(selectedYear, selectedMonth);
+
+            let filtered = dummyAbsensi.filter(a => {
+                let totalTercatat = (parseInt(a.hadir) || 0) + (parseInt(a.izinSakit) || 0);
+                let tk = hkOtomatis - totalTercatat;
+                if (tk < 0) tk = 0;
+                return tk >= 1;
+            });
+
+            filtered.sort((a, b) => {
+                let tkA = Math.max(0, hkOtomatis - ((parseInt(a.hadir) || 0) + (parseInt(a.izinSakit) || 0)));
+                let tkB = Math.max(0, hkOtomatis - ((parseInt(b.hadir) || 0) + (parseInt(b.izinSakit) || 0)));
+                if (tkB !== tkA) return tkB - tkA;
+                return (parseInt(b.terlambatMin) || 0) - (parseInt(a.terlambatMin) || 0);
+            });
+
+            if (filtered.length === 0) {
+                Swal.fire('Informasi', `Tidak ada data pegawai indisipliner untuk periode ${namaBulan[selectedMonth - 1]} ${selectedYear}.`, 'info');
+                return;
+            }
+
+            let dataExport = filtered.map((a, i) => {
+                let tk = Math.max(0, hkOtomatis - ((parseInt(a.hadir) || 0) + (parseInt(a.izinSakit) || 0)));
+                return {
+                    'No': i + 1,
+                    'Nama Pegawai': a.nama,
+                    'NIP': a.nip,
+                    'Sekolah': a.sekolah || '-',
+                    'Hari Kerja': hkOtomatis,
+                    'Hadir': a.hadir || 0,
+                    'Keterlambatan (Mnt)': a.terlambatMin || 0,
+                    'Cepat Pulang (Mnt)': a.cepatPulangMin || 0,
+                    'Izin/Sakit/DL': a.izinSakit || 0,
+                    'Tanpa Keterangan (Hari)': tk
+                };
+            });
+
+            let ws = XLSX.utils.json_to_sheet(dataExport);
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Laporan Indisipliner");
+            XLSX.writeFile(wb, `Laporan_Indisipliner_${namaBulan[selectedMonth - 1]}_${selectedYear}.xlsx`);
         }
     </script>
 </body>
