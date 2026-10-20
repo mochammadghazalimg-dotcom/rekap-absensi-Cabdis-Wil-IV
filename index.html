@@ -1038,9 +1038,9 @@
                             }
                             
                             if (record.datang !== null) {
-                                if (record.datang > "07:45:00") {
+                                if (record.datang > "08:00:00") {
                                     let [jamD, mntD] = record.datang.split(':').map(Number);
-                                    terlambatBaru = ((jamD * 60) + mntD) - ((7 * 60) + 45);
+                                    terlambatBaru = ((jamD * 60) + mntD) - ((8 * 60) + 0);
                                     if (terlambatBaru < 0) terlambatBaru = 0;
                                 }
                             } else if (record.pulang !== null) {
