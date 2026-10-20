@@ -1027,12 +1027,15 @@
                 let targetDay = parseInt(filterTglVal);
                 
                 dataTampil = dummyPegawai.map(peg => {
-                    let logMatch = dummyLogHarian.find(l => 
-                        String(l.nip).trim() === String(peg.nip).trim() && 
-                        parseInt(l.dd) === targetDay && 
-                        parseInt(l.mm) === filterBlnVal && 
-                        parseInt(l.yyyy) === filterThnVal
-                    );
+                    let pegNipClean = String(peg.nip || '').replace(/['\s]/g, '');
+                    let logMatch = dummyLogHarian.find(l => {
+                        let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
+                        let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
+                        return logNipClean === pegNipClean && 
+                              parseInt(l.dd) === targetDay && 
+                              parseInt(l.mm) === filterBlnVal && 
+                              lYear === filterThnVal;
+                    });
 
                     let hadirVal = logMatch ? (logMatch.hadir || 0) : 0;
                     let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
@@ -1059,11 +1062,14 @@
             } else {
                 // PERBAIKAN: Menghitung ulang rekap bulanan dinamis langsung dari dummyLogHarian agar tidak ganda
                 dummyAbsensi.forEach(p => {
-                    let logsBulanIni = dummyLogHarian.filter(l => 
-                        String(l.nip).trim() === String(p.nip).trim() && 
-                        parseInt(l.mm) === filterBlnVal && 
-                        parseInt(l.yyyy) === filterThnVal
-                    );
+                    let pNipClean = String(p.nip || '').replace(/['\s]/g, '');
+                    let logsBulanIni = dummyLogHarian.filter(l => {
+                        let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
+                        let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
+                        return logNipClean === pNipClean && 
+                              parseInt(l.mm) === filterBlnVal && 
+                              lYear === filterThnVal;
+                    });
 
                     let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
                     logsBulanIni.forEach(log => {
@@ -1119,6 +1125,51 @@
             }).join('');
         }
 
+        function parseTanggalLog(tanggalInput) {
+    let yyyy = new Date().getFullYear();
+    let mm = new Date().getMonth() + 1;
+    let dd = 1;
+
+    if (!tanggalInput) return { yyyy, mm, dd };
+    let str = String(tanggalInput).trim();
+
+    let dateStr = str.split(' ')[0];
+    let parts = dateStr.split(/[-/.,]/);
+
+    if (parts.length >= 3) {
+        let p1 = parseInt(parts[0]);
+        let p2 = parseInt(parts[1]);
+        let p3 = parseInt(parts[2]);
+
+        if (parts[0].length === 4) {
+            // Format YYYY-MM-DD
+            yyyy = p1; mm = p2; dd = p3;
+        } else {
+            // Format DD/MM/YYYY atau MM/DD/YYYY
+            yyyy = p3;
+            if (yyyy < 100) yyyy += 2000; // Normalisasi 26 -> 2026
+
+            if (p1 > 12) {
+                dd = p1; mm = p2;
+            } else if (p2 > 12) {
+                mm = p1; dd = p2;
+            } else {
+                // Default ke DD/MM/YYYY jika p1 dan p2 <= 12
+                dd = p1; mm = p2;
+            }
+        }
+    } else {
+        let dObj = new Date(str);
+        if (!isNaN(dObj.getTime())) {
+            yyyy = dObj.getFullYear();
+            mm = dObj.getMonth() + 1;
+            dd = dObj.getDate();
+        }
+    }
+
+    if (yyyy < 100) yyyy += 2000;
+    return { yyyy, mm, dd };
+}
         function prosesUploadLogMingguan(event) {
             const file = event.target.files[0];
             if (!file) return;
