@@ -8,37 +8,37 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// --- AMBIL SEMUA DATA DARI GOOGLE SPREADSHEET (SEKOLAH, ABSENSI, PEGAWAI) ---
+// --- AMBIL SEMUA DATA DARI GOOGLE SPREADSHEET (SEKOLAH, ABSENSI, PEGAWAI, LOG HARIAN) ---
 function ambilSemuaDataFromSheet() {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     
-    // 1. Data Sekolah (Tab: Data_Sekolah)
+    // 1. Data Sekolah
     let sheetSekolah = ss.getSheetByName('Data_Sekolah') || ss.getSheetByName('Data Sekolah');
     let dataSekolah = [];
     if (sheetSekolah) {
       let raw = sheetSekolah.getDataRange().getValues();
       if (raw.length > 1) {
-        raw.shift(); // Hapus Header
+        raw.shift();
         dataSekolah = raw.filter(row => row[0] || row[1]).map(row => ({
           id: row[0] || Date.now() + Math.random(),
           nama: String(row[1] || row[0] || '').trim(),
           npsn: String(row[2] || '').trim(),
           kepsek: String(row[3] || '').trim(),
-          nip: String(row[4] || '').trim()
+          nip: String(row[4] || '').replace(/['\s]/g, '').trim()
         }));
       }
     }
 
-    // 2. Data Rekap Absensi (Tab: Rekap_Absen)
+    // 2. Data Rekap Absensi
     let sheetRekap = ss.getSheetByName('Rekap_Absen') || ss.getSheetByName('Rekap Absensi');
     let dataAbsensi = [];
     if (sheetRekap) {
       let raw = sheetRekap.getDataRange().getValues();
       if (raw.length > 1) {
-        raw.shift(); // Hapus Header
+        raw.shift();
         dataAbsensi = raw.filter(row => row[0] || row[1]).map(row => ({
-          nip: String(row[0] || '').trim(),
+          nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
           nama: String(row[1] || '').trim(),
           sekolah: String(row[2] || '').trim(),
           hariKerja: parseInt(row[3]) || 0,
@@ -51,15 +51,15 @@ function ambilSemuaDataFromSheet() {
       }
     }
 
-    // 3. Master Data Pegawai ASN (Tab: Data_Pegawai)
+    // 3. Master Data Pegawai ASN
     let sheetPegawai = ss.getSheetByName('Data_Pegawai') || ss.getSheetByName('Data Pegawai');
     let dataPegawai = [];
     if (sheetPegawai) {
       let raw = sheetPegawai.getDataRange().getValues();
       if (raw.length > 1) {
-        raw.shift(); // Hapus Header
+        raw.shift();
         dataPegawai = raw.filter(row => row[0] || row[1]).map(row => ({
-          nip: String(row[0] || '').trim(),
+          nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
           nama: String(row[1] || '').trim(),
           sekolah: String(row[2] || '').trim(),
           photo_uploaded: String(row[3] || 'False').trim()
@@ -67,32 +67,37 @@ function ambilSemuaDataFromSheet() {
       }
     }
 
-  // 4. Data Log Harian (Tab: Log_Harian)
+    // 4. Data Log Harian (Perbaikan Auto Normalisasi Tahun 26 -> 2026)
     let sheetLog = ss.getSheetByName('Log_Harian');
     let dataLogHarian = [];
     if (sheetLog) {
       let raw = sheetLog.getDataRange().getValues();
       if (raw.length > 1) {
-        raw.shift(); // Hapus Header
-        dataLogHarian = raw.filter(row => row[0]).map(row => ({
-          nip: String(row[0] || '').trim(),
-          nama: String(row[1] || '').trim(),
-          sekolah: String(row[2] || '').trim(),
-          tanggalStr: String(row[3] || '').trim(),
-          yyyy: parseInt(row[4]) || 0,
-          mm: parseInt(row[5]) || 0,
-          dd: parseInt(row[6]) || 0,
-          hadir: parseInt(row[7]) || 0,
-          terlambatMin: parseInt(row[8]) || 0,
-          cepatPulangMin: parseInt(row[9]) || 0,
-          izinSakit: parseInt(row[10]) || 0
-        }));
+        raw.shift();
+        dataLogHarian = raw.filter(row => row[0]).map(row => {
+          let yr = parseInt(row[4]) || 0;
+          if (yr > 0 && yr < 100) yr += 2000; // Mengubah tahun 26 menjadi 2026
+
+          return {
+            nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
+            nama: String(row[1] || '').trim(),
+            sekolah: String(row[2] || '').trim(),
+            tanggalStr: String(row[3] || '').trim(),
+            yyyy: yr,
+            mm: parseInt(row[5]) || 0,
+            dd: parseInt(row[6]) || 0,
+            hadir: parseInt(row[7]) || 0,
+            terlambatMin: parseInt(row[8]) || 0,
+            cepatPulangMin: parseInt(row[9]) || 0,
+            izinSakit: parseInt(row[10]) || 0
+          };
+        });
       }
     }
 
     return { sekolah: dataSekolah, absensi: dataAbsensi, pegawai: dataPegawai, logHarian: dataLogHarian };
   } catch(err) {
-    return { error: err.message, sekolah: [], absensi: [], pegawai: [] };
+    return { error: err.message, sekolah: [], absensi: [], pegawai: [], logHarian: [] };
   }
 }
 
@@ -104,7 +109,10 @@ function simpanDataPegawaiKeSheet(listPegawai) {
     sheet.clearContents();
     let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Foto_Acuan']];
     if (listPegawai && listPegawai.length > 0) {
-      listPegawai.forEach(p => rows.push(["'" + p.nip, p.nama, p.sekolah, p.photo_uploaded || 'False']));
+      listPegawai.forEach(p => {
+        let cleanNip = String(p.nip || '').replace(/['\s]/g, '');
+        rows.push(["'" + cleanNip, p.nama, p.sekolah, p.photo_uploaded || 'False']);
+      });
     }
     sheet.getRange(1, 1, rows.length, 4).setValues(rows);
     return "OK";
@@ -138,7 +146,10 @@ function simpanRekapAbsenKeSheet(listAbsensi) {
     sheet.clearContents();
     let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Hari_Kerja', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL', 'Tanpa_Ket']];
     if (listAbsensi && listAbsensi.length > 0) {
-      listAbsensi.forEach(a => rows.push(["'" + a.nip, a.nama, a.sekolah, a.hariKerja || 0, a.hadir, a.terlambatMin, a.cepatPulangMin, a.izinSakit, a.tanpaKet]));
+      listAbsensi.forEach(a => {
+        let cleanNip = String(a.nip || '').replace(/['\s]/g, '');
+        rows.push(["'" + cleanNip, a.nama, a.sekolah, a.hariKerja || 0, a.hadir, a.terlambatMin, a.cepatPulangMin, a.izinSakit, a.tanpaKet]);
+      });
     }
     sheet.getRange(1, 1, rows.length, 9).setValues(rows);
     return "OK";
@@ -155,7 +166,12 @@ function simpanLogHarianKeSheet(listLog) {
     sheet.clearContents();
     let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tanggal', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL']];
     if (listLog && listLog.length > 0) {
-      listLog.forEach(l => rows.push(["'" + l.nip, l.nama, l.sekolah, l.tanggalStr, l.yyyy, l.mm, l.dd, l.hadir, l.terlambatMin, l.cepatPulangMin, l.izinSakit]));
+      listLog.forEach(l => {
+        let cleanNip = String(l.nip || '').replace(/['\s]/g, '');
+        let yr = parseInt(l.yyyy) || 0;
+        if (yr > 0 && yr < 100) yr += 2000;
+        rows.push(["'" + cleanNip, l.nama, l.sekolah, l.tanggalStr, yr, l.mm, l.dd, l.hadir, l.terlambatMin, l.cepatPulangMin, l.izinSakit]);
+      });
     }
     sheet.getRange(1, 1, rows.length, 11).setValues(rows);
     return "OK";
