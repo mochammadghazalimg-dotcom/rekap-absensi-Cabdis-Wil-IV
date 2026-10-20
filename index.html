@@ -113,6 +113,7 @@
                             if (db.sekolah && db.sekolah.length > 0) dummySekolah = db.sekolah;
                             if (db.absensi && db.absensi.length > 0) dummyAbsensi = db.absensi;
                             if (db.pegawai && db.pegawai.length > 0) dummyPegawai = db.pegawai;
+                            if (db.logHarian && db.logHarian.length > 0) dummyLogHarian = db.logHarian;
                         }
                         switchView('dashboard');
                     })
@@ -1183,7 +1184,9 @@
                             let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
                             let namaSekolahFinal = matchSekolah ? matchSekolah.nama : record.sekolah;
 
-                            dummyLogHarian.push({
+                            let existingIndex = dummyLogHarian.findIndex(l => l.nip === record.nip && l.tanggalStr === record.tanggal);
+
+                            let logData = {
                                 nip: record.nip,
                                 nama: record.nama,
                                 sekolah: namaSekolahFinal,
@@ -1194,7 +1197,13 @@
                                 terlambatMin: terlambatBaru,
                                 cepatPulangMin: cptPulangBaru,
                                 izinSakit: record.izinSakit
-                            });
+                            };
+
+                            if (existingIndex !== -1) {
+                                dummyLogHarian[existingIndex] = logData; // Update jika sudah ada
+                            } else {
+                                dummyLogHarian.push(logData); // Tambah baru jika belum ada
+                            }
 
                             let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
                             if (indexPegawai !== -1) {
@@ -1236,6 +1245,7 @@
 
                         if (typeof google !== 'undefined' && google.script && google.script.run) {
                             google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
+                            google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
                         }
                         renderRekapAbsen(document.getElementById('content-area'));
                         Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
