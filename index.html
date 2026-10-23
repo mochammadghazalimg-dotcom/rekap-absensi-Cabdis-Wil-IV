@@ -1027,7 +1027,7 @@
                     let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
                     let telatVal = logMatch ? (logMatch.terlambatMin || 0) : 0;
                     let cptVal = logMatch ? (logMatch.cepatPulangMin || 0) : 0;
-                    let alpaVal = (hadirVal === 0 && izinVal === 0) ? 1 : 0;
+                    let alpaVal = (hadirVal === 0) ? 1 : 0;
 
                     let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
                     let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
@@ -1070,7 +1070,8 @@
                     p.izinSakit = totIzin;
                     p.hariKerja = hkOtomatis;
                     
-                    let totalTercatat = totHadir + totIzin;
+                    let totalTercatat = totHadir; 
+                    p.tanpaKet = hkOtomatis - totalTercatat;
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -1173,11 +1174,11 @@
                                 };
                             }
 
-                            if (status === 'DATANG' && riwayatHarian[key].datang === null) {
+                            if ((status === 'MASUK' || status === 'DATANG') && riwayatHarian[key].datang === null) {
                                 riwayatHarian[key].datang = jam;
                             } else if (status === 'PULANG' && riwayatHarian[key].pulang === null) {
                                 riwayatHarian[key].pulang = jam;
-                            } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'Dinas Luar' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
+                            } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
                                 riwayatHarian[key].izinSakit = 1;
                             }
                         });
@@ -1187,24 +1188,41 @@
                             let terlambatBaru = 0;
                             let cptPulangBaru = 0;
 
-                            if (record.datang !== null || record.pulang !== null) {
+                            if (record.izinSakit > 0) {
+                                // ATURAN 3: Cuti, Izin, Sakit, Dinas Luar -> Dianggap Hadir, Telat 0, Cepat Pulang 0
                                 hadirBaru = 1;
-                            }
-                            
-                            if (record.datang !== null) {
-                                if (record.datang > "08:00:00") {
+                                terlambatBaru = 0;
+                                cptPulangBaru = 0;
+                            } else if (record.datang !== null || record.pulang !== null) {
+                                hadirBaru = 1;
+                                
+                                // ATURAN 1 & 4: MASUK
+                                if (record.datang !== null) {
                                     let [jamD, mntD] = record.datang.split(':').map(Number);
-                                    terlambatBaru = ((jamD * 60) + mntD) - ((8 * 60) + 0);
-                                    if (terlambatBaru < 0) terlambatBaru = 0;
+                                    let totalDatangMnt = (jamD * 60) + mntD;
+                                    let batasMasukMnt = (8 * 60) + 0; // 08:00
+                                    if (totalDatangMnt > batasMasukMnt) {
+                                        terlambatBaru = totalDatangMnt - batasMasukMnt;
+                                    } else {
+                                        terlambatBaru = 0; // Tepat waktu atau sebelum jam 8
+                                    }
+                                } else {
+                                    terlambatBaru = 480; // Denda tidak ada absen masuk
                                 }
-                            } else if (record.pulang !== null) {
-                                terlambatBaru = 495; 
-                            }
-                            
-                            if (record.pulang !== null && record.pulang < "16:00:00") {
-                                let [jamP, mntP] = record.pulang.split(':').map(Number);
-                                cptPulangBaru = ((16 * 60) + 0) - ((jamP * 60) + mntP);
-                                if (cptPulangBaru < 0) cptPulangBaru = 0;
+                                
+                                // ATURAN 2 & 4: PULANG
+                                if (record.pulang !== null) {
+                                    let [jamP, mntP] = record.pulang.split(':').map(Number);
+                                    let totalPulangMnt = (jamP * 60) + mntP;
+                                    let batasPulangMnt = (16 * 60) + 0; // 16:00
+                                    if (totalPulangMnt < batasPulangMnt) {
+                                        cptPulangBaru = batasPulangMnt - totalPulangMnt;
+                                    } else {
+                                        cptPulangBaru = 0; // Tepat waktu atau setelah jam 16:00
+                                    }
+                                } else {
+                                    cptPulangBaru = 480; // Denda tidak ada absen pulang
+                                }
                             }
 
                             let tglObj = parseTanggalLog(record.tanggal);
@@ -1257,7 +1275,8 @@
 
                         dummyAbsensi.forEach(p => {
                             p.hariKerja = hkOtomatis;
-                            let totalTercatat = p.hadir + p.izinSakit;
+                            // Karena hadir sudah mencakup status izin/sakit, kita tidak perlu menambahkan izinSakit lagi
+                            let totalTercatat = p.hadir;
                             p.tanpaKet = p.hariKerja - totalTercatat;
                             if (p.tanpaKet < 0) p.tanpaKet = 0;
                         });
@@ -1306,7 +1325,7 @@
                     let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
                     let telatVal = logMatch ? (logMatch.terlambatMin || 0) : 0;
                     let cptVal = logMatch ? (logMatch.cepatPulangMin || 0) : 0;
-                    let alpaVal = (hadirVal === 0 && izinVal === 0) ? 1 : 0;
+                    let alpaVal = (hadirVal === 0) ? 1 : 0;
 
                     let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
                     let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
@@ -1338,7 +1357,7 @@
                     p.izinSakit = totIzin;
                     p.hariKerja = hkOtomatis;
                     
-                    let totalTercatat = totHadir + totIzin;
+                    let totalTercatat = totHadir; 
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -1490,7 +1509,7 @@
 
             dummyAbsensi.forEach(p => {
                 p.hariKerja = hkOtomatis;
-                let totalTercatat = (parseInt(p.hadir) || 0) + (parseInt(p.izinSakit) || 0);
+                let totalTercatat = (parseInt(p.hadir) || 0);
                 p.tanpaKet = hkOtomatis - totalTercatat;
                 if (p.tanpaKet < 0) p.tanpaKet = 0;
             });
@@ -1544,7 +1563,7 @@
             let hkOtomatis = hitungHariKerjaBulanIni(selectedYear, selectedMonth);
 
             let filtered = dummyAbsensi.filter(a => {
-                let totalTercatat = (parseInt(a.hadir) || 0) + (parseInt(a.izinSakit) || 0);
+                let totalTercatat = (parseInt(a.hadir) || 0);
                 let tk = hkOtomatis - totalTercatat;
                 if (tk < 0) tk = 0;
                 return tk >= 1;
