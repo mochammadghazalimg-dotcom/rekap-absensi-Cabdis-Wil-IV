@@ -1174,13 +1174,25 @@
                                 };
                             }
 
-                            if ((status === 'MASUK' || status === 'DATANG') && riwayatHarian[key].datang === null) {
-                                riwayatHarian[key].datang = jam;
-                            } else if (status === 'PULANG' && riwayatHarian[key].pulang === null) {
-                                riwayatHarian[key].pulang = jam;
+                            // --- PENAMBAHAN PENGATURAN DOUBLE ABSENSI ---
+                            if (status === 'MASUK' || status === 'DATANG') {
+                                if (riwayatHarian[key].datang === null) {
+                                    riwayatHarian[key].datang = jam;
+                                } else if (jam < riwayatHarian[key].datang) {
+                                    // Jika ada double Masuk, ambil jam yang paling kecil/awal
+                                    riwayatHarian[key].datang = jam;
+                                }
+                            } else if (status === 'PULANG') {
+                                if (riwayatHarian[key].pulang === null) {
+                                    riwayatHarian[key].pulang = jam;
+                                } else if (jam > riwayatHarian[key].pulang) {
+                                    // Jika ada double Pulang (atau salah pencet Pulang pagi hari), ambil jam yang paling besar/akhir
+                                    riwayatHarian[key].pulang = jam;
+                                }
                             } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
                                 riwayatHarian[key].izinSakit = 1;
                             }
+                            // ---------------------------------------------
                         });
 
                         Object.values(riwayatHarian).forEach(record => {
