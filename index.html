@@ -73,8 +73,8 @@
 
         let dummySekolah = [...defaultSekolah];
         let dummyAbsensi = [];      
-        let dummyPegawai = []; // MASTER DATA PEGAWAI ASN
-        let dummyLogHarian = []; // LOG PRESENSI DETAIL HARIAN
+        let dummyPegawai = []; 
+        let dummyLogHarian = []; 
         let currentChart = null;
         let currentPieChart = null;
 
@@ -170,9 +170,6 @@
             }, 100);
         }
 
-        // ==========================================
-        // MENU 1: DATA PEGAWAI (MASTER DATA)
-        // ==========================================
         function renderDataPegawai(container) {
             if(!container) return;
             
@@ -377,7 +374,6 @@
             let best5TerlambatSekolah = [...schoolStats].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
             let best5CepatPulangSekolah = [...schoolStats].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
 
-            // ALGORITMA TELADAN PRESENSI BARU:
             let candidatesASN = dummyAbsensi.filter(a => (parseInt(a.hadir) || 0) > 0);
             if (candidatesASN.length === 0) candidatesASN = [...dummyAbsensi];
 
@@ -388,17 +384,16 @@
                 let telatA = parseInt(a.terlambatMin) || 0; let telatB = parseInt(b.terlambatMin) || 0;
                 let cepatA = parseInt(a.cepatPulangMin) || 0; let cepatB = parseInt(b.cepatPulangMin) || 0;
 
-                if (hadirB !== hadirA) return hadirB - hadirA;             // 1. Hadir terbanyak
-                if (tanpaKetA !== tanpaKetB) return tanpaKetA - tanpaKetB; // 2. Tanpa Ket (Alpa) tersedikit
-                if (izinA !== izinB) return izinA - izinB;                 // 3. Izin/Sakit/DL tersedikit
-                if (telatA !== telatB) return telatA - telatB;             // 4. Keterlambatan tersedikit
-                return cepatA - cepatB;                                    // 5. Cepat Pulang tersedikit
+                if (hadirB !== hadirA) return hadirB - hadirA;
+                if (tanpaKetA !== tanpaKetB) return tanpaKetA - tanpaKetB;
+                if (izinA !== izinB) return izinA - izinB;
+                if (telatA !== telatB) return telatA - telatB;
+                return cepatA - cepatB;
             }).slice(0, 5);
 
             const bulanIni = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
 
             container.innerHTML = `
-                <!-- RINGKASAN METRIK -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div class="glass-card p-6 border-l-4 border-blue-500 flex items-center">
                         <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4"><i class="fa-solid fa-school text-xl"></i></div>
@@ -418,7 +413,6 @@
                     </div>
                 </div>
 
-                <!-- TOP 5 ASN TELADAN -->
                 <div class="mb-8">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="font-bold text-lg text-amber-700 flex items-center">
@@ -446,7 +440,6 @@
                     </div>
                 </div>
 
-                <!-- PERINGKAT EVALUASI PRESENSI SEKOLAH -->
                 <div class="mb-8">
                     <h3 class="font-bold text-lg text-red-700 flex items-center mb-4">
                         <i class="fa-solid fa-box-archive text-red-600 mr-2"></i> Peringkat Evaluasi Presensi Sekolah (Tinggi Pelanggaran Rata-Rata per ASN)
@@ -503,7 +496,6 @@
                     </div>
                 </div>
 
-                <!-- PERINGKAT KEDISIPLINAN SEKOLAH TERBAIK -->
                 <div class="mb-8">
                     <h3 class="font-bold text-lg text-emerald-700 flex items-center mb-4">
                         <i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Peringkat Kedisiplinan Sekolah Terbaik (Terendah Pelanggaran Rata-Rata per ASN)
@@ -560,7 +552,6 @@
                     </div>
                 </div>
 
-                <!-- DIAGRAM CHART -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <div class="glass-card p-6 lg:col-span-2">
                         <h3 class="font-bold text-slate-700 mb-4">Statistik Indisipliner per Sekolah</h3>
@@ -677,14 +668,13 @@
                             link.download = `Sertifikat_Presensi_${(asn.nama || 'ASN').replace(/\s+/g, '_')}.png`;
                             link.href = canvas.toDataURL("image/png");
                             link.click();
-                            Swal.fire('Berhasil!', 'Kartu Sertifikat diunduh. Siap disebar ke grup WhatsApp!', 'success');
+                            Swal.fire('Berhasil!', 'Kartu Sertifikat diunduh.', 'success');
                         });
                     }
                 }
             });
         }
 
-        // MENU DATA SEKOLAH
         function renderDataSekolah(container) {
             if(!container) return;
             let trs = dummySekolah.map((s, i) => `
@@ -827,7 +817,7 @@
                     if (jsonData.length > 0) {
                         let count = 0;
                         jsonData.forEach(row => {
-                        let keys = Object.keys(row);
+                            let keys = Object.keys(row);
                             
                             let keyNama = keys.find(k => k.trim().toLowerCase() === 'nama sekolah' || k.trim().toLowerCase() === 'sekolah');
                             let nama = keyNama ? String(row[keyNama]).trim() : '';
@@ -895,9 +885,6 @@
             });
         }
 
-        // ==========================================
-        // MENU REKAP ABSENSI (FILTER HARIAN & BULANAN)
-        // ==========================================
         function renderRekapAbsen(container) {
             if(!container) return;
             
@@ -981,7 +968,7 @@
                                     <th class="p-3 text-center bg-blue-700">Hadir</th>
                                     <th class="p-3 text-center bg-orange-600">Keterlambatan</th>
                                     <th class="p-3 text-center bg-yellow-600">Cepat Pulang</th>
-                                    <th class="p-3 text-center bg-emerald-600">Izin/Sakit/DL</th>
+                                    <th class="p-3 text-center bg-emerald-600">Izin/Sakit/Dinas Luar</th>
                                     <th class="p-3 text-center bg-red-600">Tanpa Ket.</th>
                                 </tr>
                             </thead>
@@ -1020,7 +1007,6 @@
             }
 
             let hkOtomatis = isHarian ? 1 : hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
-
             let dataTampil = [];
 
             if (isHarian) {
@@ -1060,7 +1046,6 @@
                     };
                 });
             } else {
-                // PERBAIKAN: Menghitung ulang rekap bulanan dinamis langsung dari dummyLogHarian agar tidak ganda
                 dummyAbsensi.forEach(p => {
                     let pNipClean = String(p.nip || '').replace(/['\s]/g, '');
                     let logsBulanIni = dummyLogHarian.filter(l => {
@@ -1141,12 +1126,12 @@
                 let p3 = parseInt(parts[2], 10);
 
                 if (parts[0].length === 4) {
-                    // Format YYYY-MM-DD dari CSV (Contoh: 2026-10-09 -> Tahun 2026, Bulan 10, Tanggal 9)
+                    // Format YYYY-MM-DD dari CSV (Contoh 2026-10-09)
                     yyyy = p1;
                     mm = p2;
                     dd = p3;
                 } else {
-                    // Format MM/DD/YY dari konversi Excel (Contoh: 10/9/26 -> Bulan 10, Tanggal 9, Tahun 2026)
+                    // Format MM/DD/YY dari Konversi Spreadsheet (Contoh 10/9/26)
                     mm = p1;
                     dd = p2;
                     yyyy = p3 < 100 ? p3 + 2000 : p3;
@@ -1154,7 +1139,7 @@
             }
             return { yyyy, mm, dd };
         }
-}
+
         function prosesUploadLogMingguan(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -1192,7 +1177,7 @@
                                 riwayatHarian[key].datang = jam;
                             } else if (status === 'PULANG' && riwayatHarian[key].pulang === null) {
                                 riwayatHarian[key].pulang = jam;
-                            } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DL' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
+                            } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'Dinas Luar' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
                                 riwayatHarian[key].izinSakit = 1;
                             }
                         });
@@ -1206,7 +1191,6 @@
                                 hadirBaru = 1;
                             }
                             
-                            // BATAS JAM DATANG DITETAPKAN DI 08:00
                             if (record.datang !== null) {
                                 if (record.datang > "08:00:00") {
                                     let [jamD, mntD] = record.datang.split(':').map(Number);
@@ -1223,20 +1207,10 @@
                                 if (cptPulangBaru < 0) cptPulangBaru = 0;
                             }
 
-                            // KODE BARU:
                             let tglObj = parseTanggalLog(record.tanggal);
                             let yyyy = tglObj.yyyy;
                             let mm = tglObj.mm;
                             let dd = tglObj.dd;
-                            } else {
-                                // Penanganan mundur (fallback) jika format tanggal unik/bawaan JS
-                                let parsedDate = new Date(record.tanggal);
-                                if (!isNaN(parsedDate.getTime())) {
-                                    yyyy = parsedDate.getFullYear();
-                                    mm = parsedDate.getMonth() + 1;
-                                    dd = parsedDate.getDate();
-                                }
-                            }
 
                             let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes(record.sekolah.toUpperCase()));
                             let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
@@ -1258,9 +1232,9 @@
                             };
 
                             if (existingIndex !== -1) {
-                                dummyLogHarian[existingIndex] = logData; // Update jika sudah ada
+                                dummyLogHarian[existingIndex] = logData;
                             } else {
-                                dummyLogHarian.push(logData); // Tambah baru jika belum ada
+                                dummyLogHarian.push(logData);
                             }
 
                             let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
@@ -1279,27 +1253,14 @@
                             }
                         });
 
-                        let peringatanHariKerja = false;
                         let hkOtomatis = hitungHariKerjaBulanIni(new Date().getFullYear(), new Date().getMonth() + 1);
 
                         dummyAbsensi.forEach(p => {
                             p.hariKerja = hkOtomatis;
                             let totalTercatat = p.hadir + p.izinSakit;
                             p.tanpaKet = p.hariKerja - totalTercatat;
-                            
-                            if (p.tanpaKet < 0) {
-                                p.tanpaKet = 0;
-                                peringatanHariKerja = true;
-                            }
+                            if (p.tanpaKet < 0) p.tanpaKet = 0;
                         });
-                        
-                        if (peringatanHariKerja) {
-                            Swal.fire({
-                                icon: 'warning',
-                                title: 'Perhatian Admin!',
-                                text: 'Ada ASN dengan total Hadir + Izin melebihi jumlah Hari Kerja. Mohon periksa kembali kesesuaian data log atau jumlah Hari Kerja.',
-                            });
-                        }
 
                         if (typeof google !== 'undefined' && google.script && google.script.run) {
                             google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
@@ -1356,7 +1317,6 @@
                     };
                 });
             } else {
-                // PERBAIKAN: Excel juga mengambil rekap secara dinamis
                 dummyAbsensi.forEach(p => {
                     let logsBulanIni = dummyLogHarian.filter(l => 
                         String(l.nip).trim() === String(p.nip).trim() && 
@@ -1409,7 +1369,7 @@
                 'Hadir': a.hadir || 0,
                 'Keterlambatan (Mnt)': a.terlambatMin || 0,
                 'Cepat Pulang (Mnt)': a.cepatPulangMin || 0,
-                'Izin/Sakit/DL': a.izinSakit || 0,
+                'Izin/Sakit/Dinas Luar': a.izinSakitDinasluar || 0,
                 'Tanpa Keterangan (Hari)': a.tanpaKet || 0
             }));
 
@@ -1423,9 +1383,6 @@
             XLSX.writeFile(wb, namaFile);
         }
 
-        // ==========================================
-        // MENU LAPORAN INDISIPLINER (DENGAN EXPORT EXCEL & FILTER PERIODE)
-        // ==========================================
         function renderLaporan(container) {
             if(!container) return;
             
@@ -1494,7 +1451,7 @@
                                     <th class="p-3 text-center">Hadir</th>
                                     <th class="p-3 text-center">Keterlambatan</th>
                                     <th class="p-3 text-center">Cepat Pulang</th>
-                                    <th class="p-3 text-center">Izin/Sakit/DL</th>
+                                    <th class="p-3 text-center">Izin/Sakit/Dinas Luar</th>
                                     <th class="p-3 text-center bg-red-800">Tanpa Ket.</th>
                                 </tr>
                             </thead>
@@ -1616,7 +1573,7 @@
                     'Hadir': a.hadir || 0,
                     'Keterlambatan (Mnt)': a.terlambatMin || 0,
                     'Cepat Pulang (Mnt)': a.cepatPulangMin || 0,
-                    'Izin/Sakit/DL': a.izinSakit || 0,
+                    'Izin/Sakit/Dinas Luar': a.izinSakitDinasLuar || 0,
                     'Tanpa Keterangan (Hari)': tk
                 };
             });
