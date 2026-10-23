@@ -1202,7 +1202,7 @@
 
                             if (record.izinSakit > 0) {
                                 // ATURAN 3: Cuti, Izin, Sakit, Dinas Luar -> Dianggap Hadir, Telat 0, Cepat Pulang 0
-                                hadirBaru = 1;
+                                hadirBaru = 0;
                                 terlambatBaru = 0;
                                 cptPulangBaru = 0;
                             } else if (record.datang !== null || record.pulang !== null) {
