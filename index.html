@@ -1155,14 +1155,39 @@
                         let riwayatHarian = {}; 
 
                         jsonData.forEach(row => {
-                            let nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
-                            let namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
-                            if (nipPegawai === '-' || nipPegawai === '') return;
+                            let nipPegawai, namaPegawai, namaSekolah, tanggal, jam, status;
 
-                            let namaSekolah = String(row['sekolah'] || row['Sekolah'] || row['SEKOLAH'] || '-').trim();
-                            let tanggal = String(row['tanggal'] || row['Tanggal'] || '').trim();
-                            let jam = String(row['jam'] || row['Jam'] || '').trim();
-                            let status = String(row['status'] || row['Status'] || '').trim().toUpperCase();
+                            // Cek apakah data menyatu dalam satu kolom (mengandung koma)
+                            const keys = Object.keys(row);
+                            if (keys.length === 1 && keys[0].includes(',')) {
+                                const headerArr = keys[0].split(',');
+                                const valueArr = String(row[keys[0]]).split(',');
+
+                                const nipIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'nip');
+                                const namaIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'nama');
+                                const sekolahIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'sekolah');
+                                const tglIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'tanggal');
+                                const jamIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'jam');
+                                const statusIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'status');
+
+                                nipPegawai = nipIdx !== -1 ? String(valueArr[nipIdx] || '').trim() : '-';
+                                namaPegawai = namaIdx !== -1 ? String(valueArr[namaIdx] || '').trim() : '-';
+                                namaSekolah = sekolahIdx !== -1 ? String(valueArr[sekolahIdx] || '').trim() : '-';
+                                tanggal = tglIdx !== -1 ? String(valueArr[tglIdx] || '').trim() : '';
+                                jam = jamIdx !== -1 ? String(valueArr[jamIdx] || '').trim() : '';
+                                status = statusIdx !== -1 ? String(valueArr[statusIdx] || '').trim().toUpperCase() : '';
+            
+                            } else {
+                                // Mode normal jika format kolom sudah terpisah rapi dari awal
+                                nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
+                                namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
+                                namaSekolah = String(row['sekolah'] || row['Sekolah'] || row['SEKOLAH'] || '-').trim();
+                                tanggal = String(row['tanggal'] || row['Tanggal'] || '').trim();
+                                jam = String(row['jam'] || row['Jam'] || '').trim();
+                                status = String(row['status'] || row['Status'] || '').trim().toUpperCase();
+                            }
+
+                            if (nipPegawai === '-' || nipPegawai === '') return;
 
                             let key = nipPegawai + "_" + tanggal;
 
