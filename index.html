@@ -1027,7 +1027,7 @@
                     let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
                     let telatVal = logMatch ? (logMatch.terlambatMin || 0) : 0;
                     let cptVal = logMatch ? (logMatch.cepatPulangMin || 0) : 0;
-                    let alpaVal = (hadirVal === 0) ? 1 : 0;
+                    let alpaVal = (hadirVal === 0 && izinVal === 0) ? 1 : 0;
 
                     let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
                     let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
@@ -1070,8 +1070,7 @@
                     p.izinSakit = totIzin;
                     p.hariKerja = hkOtomatis;
                     
-                    let totalTercatat = totHadir; 
-                    p.tanpaKet = hkOtomatis - totalTercatat;
+                    let totalTercatat = totHadir + totIzin; 
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -1337,7 +1336,7 @@
                     let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
                     let telatVal = logMatch ? (logMatch.terlambatMin || 0) : 0;
                     let cptVal = logMatch ? (logMatch.cepatPulangMin || 0) : 0;
-                    let alpaVal = (hadirVal === 0) ? 1 : 0;
+                    let alpaVal = (hadirVal === 0 && izinVal === 0) ? 1 : 0;
 
                     let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
                     let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
@@ -1369,7 +1368,7 @@
                     p.izinSakit = totIzin;
                     p.hariKerja = hkOtomatis;
                     
-                    let totalTercatat = totHadir; 
+                    let totalTercatat = totHadir + totIzin; 
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
