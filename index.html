@@ -1247,6 +1247,17 @@
 
                             let existingIndex = dummyLogHarian.findIndex(l => l.nip === record.nip && l.tanggalStr === record.tanggal);
 
+                            // 1. Ambil nilai lama sebelum ditimpa (agar kita bisa hitung selisihnya)
+                            let oldHadir = 0, oldTerlambat = 0, oldCepatPulang = 0, oldIzinSakit = 0;
+                            if (existingIndex !== -1) {
+                                let oldLog = dummyLogHarian[existingIndex];
+                                oldHadir = oldLog.hadir || 0;
+                                oldTerlambat = oldLog.terlambatMin || 0;
+                                oldCepatPulang = oldLog.cepatPulangMin || 0;
+                                oldIzinSakit = oldLog.izinSakit || 0;
+                            }
+
+                            // 2. Siapkan data log baru
                             let logData = {
                                 nip: record.nip,
                                 nama: record.nama,
@@ -1260,18 +1271,20 @@
                                 izinSakit: record.izinSakit
                             };
 
+                            // 3. Simpan ke Log Harian (Timpa jika ada, tambah jika baru)
                             if (existingIndex !== -1) {
                                 dummyLogHarian[existingIndex] = logData;
                             } else {
                                 dummyLogHarian.push(logData);
                             }
 
+                            // 4. Update Rekap Absensi berdasarkan SELISIH (Delta) sehingga terhindar dari double entry
                             let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
                             if (indexPegawai !== -1) {
-                                dummyAbsensi[indexPegawai].hadir += hadirBaru;
-                                dummyAbsensi[indexPegawai].terlambatMin += terlambatBaru;
-                                dummyAbsensi[indexPegawai].cepatPulangMin += cptPulangBaru;
-                                dummyAbsensi[indexPegawai].izinSakit += record.izinSakit;
+                                dummyAbsensi[indexPegawai].hadir += (hadirBaru - oldHadir);
+                                dummyAbsensi[indexPegawai].terlambatMin += (terlambatBaru - oldTerlambat);
+                                dummyAbsensi[indexPegawai].cepatPulangMin += (cptPulangBaru - oldCepatPulang);
+                                dummyAbsensi[indexPegawai].izinSakit += (record.izinSakit - oldIzinSakit);
                             } else {
                                 dummyAbsensi.push({
                                     id: Date.now() + Math.random(),
