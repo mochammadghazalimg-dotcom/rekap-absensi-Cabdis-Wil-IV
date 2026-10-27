@@ -173,8 +173,17 @@
         function renderDataPegawai(container) {
             if(!container) return;
             
+            // --- MODIFIKASI DEFAULT SMAN 1 WAJO ---
+            let wajoSchoolPeg = dummySekolah.find(s => s.nama.toUpperCase().includes('SMAN 1 WAJO'));
+            let wajoNamaPeg = wajoSchoolPeg ? wajoSchoolPeg.nama : "SMAN 1 WAJO";
+
             let sekolahOptions = `<option value="ALL">Semua Sekolah</option>` + 
-                dummySekolah.map(s => `<option value="${s.nama}">${s.nama}</option>`).join('');
+                dummySekolah.map(s => `<option value="${s.nama}" ${s.nama === wajoNamaPeg ? 'selected' : ''}>${s.nama}</option>`).join('');
+            
+            if (!wajoSchoolPeg) {
+                sekolahOptions = `<option value="SMAN 1 WAJO" selected>SMAN 1 WAJO</option>` + sekolahOptions;
+            }
+            // --------------------------------------
 
             container.innerHTML = `
                 <div class="glass-card p-6">
@@ -892,7 +901,13 @@
             let currentBulan = now.getMonth() + 1;
             let currentTahun = now.getFullYear();
 
-            let optionsSekolah = `<option value="ALL">Semua Sekolah</option>` + dummySekolah.map(s => `<option value="${s.id}">${s.nama}</option>`).join('');
+            // --- MODIFIKASI DEFAULT SMAN 1 WAJO ---
+            let wajoSchoolAbs = dummySekolah.find(s => s.nama.toUpperCase().includes('SMAN 1 WAJO'));
+            let wajoIdAbs = wajoSchoolAbs ? wajoSchoolAbs.id : "ALL";
+
+            let optionsSekolah = `<option value="ALL" ${wajoIdAbs === 'ALL' ? 'selected' : ''}>Semua Sekolah</option>` + 
+                dummySekolah.map(s => `<option value="${s.id}" ${s.id == wajoIdAbs ? 'selected' : ''}>${s.nama}</option>`).join('');
+            // --------------------------------------
 
             let optionTanggal = `<option value="ALL">Semua Tanggal (Rekap Bulanan)</option>`;
             for(let d = 1; d <= 31; d++) {
@@ -1526,19 +1541,23 @@
                             <tbody id="bodyIndisipliner"></tbody>
                         </table>
                     </div>
+                    
+                    <!-- Tambahan div untuk nomor paginasi halaman -->
+                    <div id="paginationIndisipliner" class="flex justify-center mt-6 gap-2 flex-wrap"></div>
                 </div>
             `;
 
             terapkanFilterIndisipliner();
         }
 
-        function terapkanFilterIndisipliner() {
+        function terapkanFilterIndisipliner(page = 1) {
             sinkronkanMasterKeAbsensi();
 
             const elBulan = document.getElementById('filterBulanIndisipliner');
             const elTahun = document.getElementById('filterTahunIndisipliner');
             const tbody = document.getElementById('bodyIndisipliner');
             const labelPeriode = document.getElementById('labelPeriodeIndisipliner');
+            const pagContainer = document.getElementById('paginationIndisipliner');
 
             if (!tbody) return;
 
@@ -1576,12 +1595,22 @@
 
             if (filtered.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-500 font-medium">Tidak ada pegawai yang memiliki Tanpa Keterangan pada periode ${namaBulan[selectedMonth - 1]} ${selectedYear}. Semua hadir/izin penuh.</td></tr>`;
+                if (pagContainer) pagContainer.innerHTML = '';
                 return;
             }
 
-            tbody.innerHTML = filtered.map((a, i) => `
+            // --- SISTEM PAGINASI MAX 50 PEGAWAI PER HALAMAN ---
+            let limit = 50;
+            let totalPages = Math.ceil(filtered.length / limit);
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            
+            let startIndex = (page - 1) * limit;
+            let paginated = filtered.slice(startIndex, startIndex + limit);
+
+            tbody.innerHTML = paginated.map((a, i) => `
                 <tr class="border-b border-slate-100 hover:bg-red-50/50 text-sm">
-                    <td class="p-3 text-center font-bold text-slate-500">${i + 1}</td>
+                    <td class="p-3 text-center font-bold text-slate-500">${startIndex + i + 1}</td>
                     <td class="p-3 font-semibold text-slate-800">${a.nama}</td>
                     <td class="p-3 text-slate-500 font-mono text-xs">${a.nip}</td>
                     <td class="p-3 text-slate-600">${a.sekolah || '-'}</td>
@@ -1593,6 +1622,17 @@
                     <td class="p-3 text-center text-red-700 font-extrabold bg-red-100/80">${a.tanpaKet || 0} Hari</td>
                 </tr>
             `).join('');
+
+            // --- RENDER TOMBOL PAGINASI ---
+            if (pagContainer) {
+                let paginationHtml = '';
+                if (totalPages > 1) {
+                    for (let p = 1; p <= totalPages; p++) {
+                        paginationHtml += `<button onclick="terapkanFilterIndisipliner(${p})" class="px-3 py-1 rounded text-sm font-semibold transition-all ${p === page ? 'bg-red-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${p}</button>`;
+                    }
+                }
+                pagContainer.innerHTML = paginationHtml;
+            }
         }
 
         function downloadExcelIndisipliner() {
