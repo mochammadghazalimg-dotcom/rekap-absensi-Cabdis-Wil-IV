@@ -212,6 +212,8 @@
                                     <th class="p-3 border-b">Nama Pegawai</th>
                                     <th class="p-3 border-b">Sekolah</th>
                                     <th class="p-3 text-center border-b">Foto Acuan</th>
+                                    <!-- TAMBAHAN: Kolom Aksi -->
+                                    <th class="p-3 text-center border-b w-24">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="bodyPegawai"></tbody>
@@ -248,10 +250,58 @@
                             ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'Tersedia' : 'Belum Ada'}
                         </span>
                     </td>
+                    <!-- TAMBAHAN: Tombol Edit -->
+                    <td class="p-3 text-center">
+                        <button onclick="editPegawai('${p.nip}')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs"><i class="fa-solid fa-pen"></i> Edit</button>
+                    </td>
                 </tr>
             `).join('');
         }
 
+        function editPegawai(nip) {
+            let p = dummyPegawai.find(x => String(x.nip) === String(nip));
+            if(!p) return;
+
+            Swal.fire({
+                title: 'Edit Data ASN',
+                html: `
+                    <div class="flex flex-col gap-3 mt-4 text-left">
+                        <label class="text-xs font-semibold text-slate-600">NIP (Ubah ke 01 dst jika terpotong)</label>
+                        <input id="swal-peg-nip" class="w-full p-2 border rounded" value="${p.nip}">
+                        
+                        <label class="text-xs font-semibold text-slate-600">Nama Pegawai</label>
+                        <input id="swal-peg-nama" class="w-full p-2 border rounded" value="${p.nama}">
+                        
+                        <label class="text-xs font-semibold text-slate-600">Sekolah</label>
+                        <input id="swal-peg-sekolah" class="w-full p-2 border rounded" value="${p.sekolah}">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Simpan',
+                confirmButtonColor: '#3b82f6',
+                preConfirm: () => {
+                    return {
+                        nip: document.getElementById('swal-peg-nip').value,
+                        nama: document.getElementById('swal-peg-nama').value,
+                        sekolah: document.getElementById('swal-peg-sekolah').value
+                    };
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value.nip) {
+                    p.nip = result.value.nip;
+                    p.nama = result.value.nama;
+                    p.sekolah = result.value.sekolah;
+
+                    // Simpan kembali ke Spreadsheet
+                    if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+                    }
+                    renderDataPegawai(document.getElementById('content-area'));
+                    Swal.fire('Berhasil', 'Data ASN diperbarui', 'success');
+                }
+            });
+        }
+        
         function prosesUploadPegawaiCSV(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -1361,81 +1411,45 @@
         }
 
         function downloadExcelAbsen() {
-            const filterSekolahVal = document.getElementById('filterSekolah') ? document.getElementById('filterSekolah').value : "ALL";
+            // Hapus pembatasan filter sekolah agar SEMUA SEKOLAH terekspor
             const filterTglVal = document.getElementById('filterTanggalAbsen') ? document.getElementById('filterTanggalAbsen').value : "ALL";
             const filterBlnVal = document.getElementById('filterBulanAbsen') ? parseInt(document.getElementById('filterBulanAbsen').value) : (new Date().getMonth() + 1);
             const filterThnVal = document.getElementById('filterTahunAbsen') ? parseInt(document.getElementById('filterTahunAbsen').value) : new Date().getFullYear();
 
-            let namaBulan = [
-                "Januari", "Februari", "Maret", "April", "Mei", "Juni", 
-                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-            ];
-
+            let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             let isHarian = (filterTglVal !== "ALL");
             let hkOtomatis = isHarian ? 1 : hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
+            
+            // Kita rekap datanya ulang tanpa menggunakan data yang terfilter di tabel UI
             let dataTampil = [];
-
             if (isHarian) {
                 let targetDay = parseInt(filterTglVal);
                 dataTampil = dummyPegawai.map(peg => {
                     let logMatch = dummyLogHarian.find(l => 
                         String(l.nip).trim() === String(peg.nip).trim() && 
-                        parseInt(l.dd) === targetDay && 
-                        parseInt(l.mm) === filterBlnVal && 
-                        parseInt(l.yyyy) === filterThnVal
+                        parseInt(l.dd) === targetDay && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal
                     );
-
                     let hadirVal = logMatch ? (logMatch.hadir || 0) : 0;
                     let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
-                    let telatVal = logMatch ? (logMatch.terlambatMin || 0) : 0;
-                    let cptVal = logMatch ? (logMatch.cepatPulangMin || 0) : 0;
-                    let alpaVal = (hadirVal === 0 && izinVal === 0) ? 1 : 0;
-
-                    let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
-                    let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
-
                     return {
-                        nama: peg.nama, nip: peg.nip, sekolah: peg.sekolah, sekolahId: idSekolahVal,
-                        hariKerja: 1, hadir: hadirVal, terlambatMin: telatVal, cepatPulangMin: cptVal, izinSakit: izinVal, tanpaKet: alpaVal
+                        nama: peg.nama, nip: peg.nip, sekolah: peg.sekolah || '-',
+                        hariKerja: 1, hadir: hadirVal, terlambatMin: logMatch ? (logMatch.terlambatMin || 0) : 0, 
+                        cepatPulangMin: logMatch ? (logMatch.cepatPulangMin || 0) : 0, izinSakit: izinVal, tanpaKet: (hadirVal === 0 && izinVal === 0) ? 1 : 0
                     };
                 });
             } else {
                 dummyAbsensi.forEach(p => {
-                    let logsBulanIni = dummyLogHarian.filter(l => 
-                        String(l.nip).trim() === String(p.nip).trim() && 
-                        parseInt(l.mm) === filterBlnVal && 
-                        parseInt(l.yyyy) === filterThnVal
-                    );
-
+                    let logsBulanIni = dummyLogHarian.filter(l => String(l.nip).trim() === String(p.nip).trim() && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal);
                     let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
                     logsBulanIni.forEach(log => {
-                        totHadir += (parseInt(log.hadir) || 0);
-                        totTelat += (parseInt(log.terlambatMin) || 0);
-                        totCepat += (parseInt(log.cepatPulangMin) || 0);
-                        totIzin += (parseInt(log.izinSakit) || 0);
+                        totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
+                        totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
                     });
-
-                    p.hadir = totHadir;
-                    p.terlambatMin = totTelat;
-                    p.cepatPulangMin = totCepat;
-                    p.izinSakit = totIzin;
-                    p.hariKerja = hkOtomatis;
                     
-                    let totalTercatat = totHadir + totIzin; 
-                    p.tanpaKet = hkOtomatis - totalTercatat;
-                    if (p.tanpaKet < 0) p.tanpaKet = 0;
+                    p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat; p.izinSakit = totIzin; p.hariKerja = hkOtomatis;
+                    let tk = hkOtomatis - (totHadir + totIzin); p.tanpaKet = tk < 0 ? 0 : tk;
                 });
                 dataTampil = dummyAbsensi;
-            }
-
-            if (filterSekolahVal !== "ALL") {
-                let sekolahObj = dummySekolah.find(s => String(s.id) === String(filterSekolahVal));
-                let nmSekolah = sekolahObj ? sekolahObj.nama.toUpperCase() : "";
-                
-                dataTampil = dataTampil.filter(a => 
-                    String(a.sekolahId) === String(filterSekolahVal) || 
-                    String(a.sekolah).toUpperCase().includes(nmSekolah)
-                );
             }
 
             if(dataTampil.length === 0) {
@@ -1443,26 +1457,119 @@
                 return;
             }
 
+            // Map data utama
             let dataExport = dataTampil.map((a, i) => ({
                 'No': i + 1,
                 'Nama Pegawai': a.nama,
                 'NIP': a.nip,
-                'Sekolah': a.sekolah || '-',
-                'Hari Kerja': a.hariKerja || hkOtomatis,
-                'Hadir': a.hadir || 0,
-                'Keterlambatan (Mnt)': a.terlambatMin || 0,
-                'Cepat Pulang (Mnt)': a.cepatPulangMin || 0,
-                'Izin/Sakit/Dinas Luar': a.izinSakit || 0,
-                'Tanpa Keterangan (Hari)': a.tanpaKet || 0
+                'Sekolah': a.sekolah,
+                'Hari Kerja': a.hariKerja,
+                'Hadir': a.hadir,
+                'Keterlambatan (Mnt)': a.terlambatMin,
+                'Cepat Pulang (Mnt)': a.cepatPulangMin,
+                'Izin/Sakit/DL': a.izinSakit,
+                'Tanpa Keterangan': a.tanpaKet
             }));
 
+            // Tambahkan Format Tanda Tangan
+            let today = new Date();
+            let dateStr = today.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
+            
+            dataExport.push({}); // Baris Kosong
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': `.................., ${dateStr}` });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Mengetahui,' });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Kepala Sekolah' });
+            dataExport.push({}); // Space untuk Tanda tangan
+            dataExport.push({}); 
+            dataExport.push({}); 
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NAMA' });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NIP. ....................' });
+
             let namaFile = isHarian 
-                ? `Rekap_Absen_Harian_Tgl_${filterTglVal}_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`
-                : `Rekap_Absen_Bulanan_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
+                ? `Rekap_Semua_Sekolah_Harian_${filterTglVal}_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`
+                : `Rekap_Semua_Sekolah_Bulanan_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
 
             let ws = XLSX.utils.json_to_sheet(dataExport);
+            
+            // Atur agar kolom terlihat rapih/border default Excel tertata
+            ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
+
             let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, isHarian ? "Rekap Harian" : "Rekap Bulanan");
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap Keseluruhan");
+            XLSX.writeFile(wb, namaFile);
+        }
+
+        // FUNGSI BARU UNTUK EXPORT INDISIPLINER
+        function downloadExcelIndisipliner() {
+            const filterBlnVal = document.getElementById('filterBulanIndisipliner') ? parseInt(document.getElementById('filterBulanIndisipliner').value) : (new Date().getMonth() + 1);
+            const filterThnVal = document.getElementById('filterTahunIndisipliner') ? parseInt(document.getElementById('filterTahunIndisipliner').value) : new Date().getFullYear();
+            
+            let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            let hkOtomatis = hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
+            
+            let dataIndisipliner = [];
+            dummyAbsensi.forEach(p => {
+                let logsBulanIni = dummyLogHarian.filter(l => String(l.nip).trim() === String(p.nip).trim() && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal);
+                let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                
+                logsBulanIni.forEach(log => {
+                    totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
+                    totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
+                });
+
+                let tk = hkOtomatis - (totHadir + totIzin);
+                if (tk < 0) tk = 0;
+                
+                // Ambil semua sekolah yang indisipliner >= 1
+                if (tk >= 1) {
+                    dataIndisipliner.push({
+                        nama: p.nama, nip: p.nip, sekolah: p.sekolah || '-', hariKerja: hkOtomatis,
+                        hadir: totHadir, terlambatMin: totTelat, cepatPulangMin: totCepat, izinSakit: totIzin, tanpaKet: tk
+                    });
+                }
+            });
+
+            dataIndisipliner.sort((a, b) => b.tanpaKet - a.tanpaKet); // Sort terbanyak
+
+            if(dataIndisipliner.length === 0) {
+                Swal.fire('Kosong', 'Tidak ada data indisipliner untuk bulan ini.', 'warning');
+                return;
+            }
+
+            let dataExport = dataIndisipliner.map((a, i) => ({
+                'No': i + 1,
+                'Nama Pegawai': a.nama,
+                'NIP': a.nip,
+                'Sekolah': a.sekolah,
+                'Hari Kerja': a.hariKerja,
+                'Hadir': a.hadir,
+                'Keterlambatan (Mnt)': a.terlambatMin,
+                'Cepat Pulang (Mnt)': a.cepatPulangMin,
+                'Izin/Sakit/DL': a.izinSakit,
+                'Tanpa Keterangan': a.tanpaKet
+            }));
+
+            // Tambahkan Format Tanda Tangan
+            let today = new Date();
+            let dateStr = today.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
+            
+            dataExport.push({}); // Baris Kosong
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': `.................., ${dateStr}` });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Mengetahui,' });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Kepala Sekolah' });
+            dataExport.push({}); // Space TTD
+            dataExport.push({}); 
+            dataExport.push({}); 
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NAMA' });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NIP. ....................' });
+
+            let namaFile = `Laporan_Indisipliner_Semua_Sekolah_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
+
+            let ws = XLSX.utils.json_to_sheet(dataExport);
+            ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
+
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Lap. Indisipliner");
             XLSX.writeFile(wb, namaFile);
         }
 
@@ -1633,63 +1740,6 @@
                 }
                 pagContainer.innerHTML = paginationHtml;
             }
-        }
-
-        function downloadExcelIndisipliner() {
-            sinkronkanMasterKeAbsensi();
-
-            const elBulan = document.getElementById('filterBulanIndisipliner');
-            const elTahun = document.getElementById('filterTahunIndisipliner');
-
-            let selectedMonth = elBulan ? parseInt(elBulan.value) : (new Date().getMonth() + 1);
-            let selectedYear = elTahun ? parseInt(elTahun.value) : new Date().getFullYear();
-
-            let namaBulan = [
-                "Januari", "Februari", "Maret", "April", "Mei", "Juni", 
-                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-            ];
-
-            let hkOtomatis = hitungHariKerjaBulanIni(selectedYear, selectedMonth);
-
-            let filtered = dummyAbsensi.filter(a => {
-                let totalTercatat = (parseInt(a.hadir) || 0);
-                let tk = hkOtomatis - totalTercatat;
-                if (tk < 0) tk = 0;
-                return tk >= 1;
-            });
-
-            filtered.sort((a, b) => {
-                let tkA = Math.max(0, hkOtomatis - ((parseInt(a.hadir) || 0) + (parseInt(a.izinSakit) || 0)));
-                let tkB = Math.max(0, hkOtomatis - ((parseInt(b.hadir) || 0) + (parseInt(b.izinSakit) || 0)));
-                if (tkB !== tkA) return tkB - tkA;
-                return (parseInt(b.terlambatMin) || 0) - (parseInt(a.terlambatMin) || 0);
-            });
-
-            if (filtered.length === 0) {
-                Swal.fire('Informasi', `Tidak ada data pegawai indisipliner untuk periode ${namaBulan[selectedMonth - 1]} ${selectedYear}.`, 'info');
-                return;
-            }
-
-            let dataExport = filtered.map((a, i) => {
-                let tk = Math.max(0, hkOtomatis - ((parseInt(a.hadir) || 0) + (parseInt(a.izinSakit) || 0)));
-                return {
-                    'No': i + 1,
-                    'Nama Pegawai': a.nama,
-                    'NIP': a.nip,
-                    'Sekolah': a.sekolah || '-',
-                    'Hari Kerja': hkOtomatis,
-                    'Hadir': a.hadir || 0,
-                    'Keterlambatan (Mnt)': a.terlambatMin || 0,
-                    'Cepat Pulang (Mnt)': a.cepatPulangMin || 0,
-                    'Izin/Sakit/Dinas Luar': a.izinSakit || 0,
-                    'Tanpa Keterangan (Hari)': tk
-                };
-            });
-
-            let ws = XLSX.utils.json_to_sheet(dataExport);
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Laporan Indisipliner");
-            XLSX.writeFile(wb, `Laporan_Indisipliner_${namaBulan[selectedMonth - 1]}_${selectedYear}.xlsx`);
         }
     </script>
 </body>
