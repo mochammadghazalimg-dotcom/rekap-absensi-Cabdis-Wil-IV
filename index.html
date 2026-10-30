@@ -197,6 +197,10 @@
                                 ${sekolahOptions}
                             </select>
                             <input type="file" id="uploadCSVPegawai" accept=".csv" class="hidden" onchange="prosesUploadPegawaiCSV(event)" />
+                            <!-- TAMBAHKAN TOMBOL TEMPLATE DI SINI -->
+                            <button onclick="downloadTemplatePegawai()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-download"></i> Template
+                            </button>
                             <button onclick="document.getElementById('uploadCSVPegawai').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
                                 <i class="fa-solid fa-file-csv"></i> Unggah CSV Pegawai
                             </button>
@@ -754,10 +758,18 @@
                 <div class="glass-card p-6">
                     <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
                         <h3 class="font-bold text-slate-700">Daftar Sekolah Cabdin Wil. IV</h3>
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 flex-wrap justify-end">
                             <input type="file" id="uploadExcelSekolah" accept=".xlsx, .xls, .csv" class="hidden" onchange="prosesUploadSekolah(event)" />
-                            <button onclick="document.getElementById('uploadExcelSekolah').click()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm"><i class="fa-solid fa-upload mr-2"></i> Unggah Sekolah</button>
-                            <button onclick="tambahSekolahBaru()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"><i class="fa-solid fa-plus mr-2"></i> Manual</button>
+                            <!-- TAMBAHKAN TOMBOL TEMPLATE DI SINI -->
+                            <button onclick="downloadTemplateSekolah()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-download"></i> Template
+                            </button>
+                            <button onclick="document.getElementById('uploadExcelSekolah').click()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-upload"></i> Unggah Sekolah
+                            </button>
+                            <button onclick="tambahSekolahBaru()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-plus"></i> Manual
+                            </button>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
@@ -1655,6 +1667,38 @@
             `;
 
             terapkanFilterIndisipliner();
+        }
+
+        function downloadTemplatePegawai() {
+            // Header harus sesuai dengan yang dibaca oleh PapaParse di fungsi prosesUploadPegawaiCSV
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "nip,nama,sekolah,photo_uploaded\n";
+            csvContent += "198001012005011001,Nama Pegawai Contoh,SMAN 1 WAJO,False\n";
+            csvContent += "198502022010022002,Budi Santoso,SMKN 6 WAJO,False\n";
+    
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Template_Data_Pegawai.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function downloadTemplateSekolah() {
+            // Header harus sesuai dengan yang dibaca XLSX di fungsi prosesUploadSekolah
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Nama Sekolah,NPSN,Kepala Sekolah,NIP\n";
+            csvContent += "SMAN 1 CONTOH,10001111,Nama Kepsek Contoh,197001012000011001\n";
+            csvContent += "SMKN 2 CONTOH,10002222,Ahmad Subarjo,197203032005011003\n";
+    
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Template_Data_Sekolah.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function terapkanFilterIndisipliner(page = 1) {
