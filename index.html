@@ -31,7 +31,7 @@
                 <i class="fa-solid fa-building-flag text-2xl text-blue-600"></i>
             </div>
             <h1 class="text-lg font-bold tracking-wider uppercase text-blue-400">Cabdin Wil. IV</h1>
-            <p class="text-xs text-slate-400">Sistem Presensi Terpadu</p>
+            <p class="text-xs text-slate-400">Absensi Satuan Pendidikan</p>
         </div>
         <nav class="flex-1 mt-6">
             <ul class="space-y-1">
@@ -384,20 +384,23 @@
             let totalSekolah = dummySekolah.length || 0;
             let totTerlambatMin = 0, totCepatPulangMin = 0, totIzinSakit = 0, totTanpaKet = 0;
             
+            // 1. Menghitung total ASN pada masing-masing sekolah
             let schoolStats = dummySekolah.map(s => {
                 let pegSekolah = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(s.nama.toUpperCase()));
                 let totalASN = pegSekolah.length;
 
+                // Jika di master pegawai tidak ada, cek dari riwayat absensi
                 if (totalASN === 0) {
                     totalASN = dummyAbsensi.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase())).length;
                 }
                 
-                if (totalASN === 0) totalASN = 1;
+                // HAPUS atau KOMENTARI baris ini agar totalASN yang 0 tidak diubah menjadi 1
+                // if (totalASN === 0) totalASN = 1; 
 
                 return { 
                     id: s.id, 
                     nama: s.nama, 
-                    totalASN: totalASN,
+                    totalASN: totalASN, // totalASN murni (bisa 0)
                     terlambatMin: 0, 
                     cepatPulangMin: 0, 
                     tanpaKet: 0, 
@@ -408,6 +411,7 @@
                 };
             });
 
+            // Akumulasi data absensi ke masing-masing sekolah
             dummyAbsensi.forEach(absen => {
                 totTerlambatMin += parseInt(absen.terlambatMin) || 0;
                 totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
@@ -423,19 +427,31 @@
                 }
             });
 
+            // 2. Hitung rata-rata HANYA JIKA sekolah memiliki ASN (totalASN > 0)
             schoolStats.forEach(s => {
-                s.avgTanpaKet = parseFloat((s.tanpaKet / s.totalASN).toFixed(1));
-                s.avgTerlambatMin = Math.round(s.terlambatMin / s.totalASN);
-                s.avgCepatPulangMin = Math.round(s.cepatPulangMin / s.totalASN);
+                if (s.totalASN > 0) {
+                    s.avgTanpaKet = parseFloat((s.tanpaKet / s.totalASN).toFixed(1));
+                    s.avgTerlambatMin = Math.round(s.terlambatMin / s.totalASN);
+                    s.avgCepatPulangMin = Math.round(s.cepatPulangMin / s.totalASN);
+                } else {
+                    // Jika tidak ada ASN, set rata-rata ke 0
+                    s.avgTanpaKet = 0;
+                    s.avgTerlambatMin = 0;
+                    s.avgCepatPulangMin = 0;
+                }
             });
 
-            let top5AlpaSekolah = [...schoolStats].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
-            let top5TerlambatSekolah = [...schoolStats].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
-            let top5CepatPulangSekolah = [...schoolStats].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin).slice(0, 5);
+            // 3. FILTER SEKOLAH AKTIF: Pisahkan sekolah yang memiliki minimal 1 ASN
+            let activeSchools = schoolStats.filter(s => s.totalASN > 0);
 
-            let best5AlpaSekolah = [...schoolStats].sort((a,b) => a.avgTanpaKet - b.avgTanpaKet).slice(0, 5);
-            let best5TerlambatSekolah = [...schoolStats].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
-            let best5CepatPulangSekolah = [...schoolStats].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
+            // 4. Ubah perhitungan Top dan Best menggunakan `activeSchools`, bukan `schoolStats`
+            let top5AlpaSekolah = [...activeSchools].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
+            let top5TerlambatSekolah = [...activeSchools].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
+            let top5CepatPulangSekolah = [...activeSchools].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin).slice(0, 5);
+
+            let best5AlpaSekolah = [...activeSchools].sort((a,b) => a.avgTanpaKet - b.avgTanpaKet).slice(0, 5);
+            let best5TerlambatSekolah = [...activeSchools].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
+            let best5CepatPulangSekolah = [...activeSchools].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
 
             let candidatesASN = dummyAbsensi.filter(a => (parseInt(a.hadir) || 0) > 0);
             if (candidatesASN.length === 0) candidatesASN = [...dummyAbsensi];
@@ -671,71 +687,138 @@
 
         function tampilkanKartuASN(asnJsonEncoded) {
             let asn = JSON.parse(decodeURIComponent(asnJsonEncoded));
-            const bulanIni = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+    
+            // Ambil Tanggal & Bulan Saat Ini
+            const now = new Date();
+            const bulanNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            const currentBulan = bulanNames[now.getMonth()];
+            const currentTahun = now.getFullYear();
+            const periodeTeks = `${currentBulan}&nbsp;${currentTahun}`;
 
+            // Hitung tanggal terakhir pada bulan berjalan untuk TTD
+            const lastDayObj = new Date(currentTahun, now.getMonth() + 1, 0);
+            const lastDayDate = lastDayObj.getDate();
+            const ttdTanggal = `Wajo,&nbsp;${lastDayDate}&nbsp;${currentBulan}&nbsp;${currentTahun}`;
+
+            const logoSulsel = "https://i.imgur.com/N8da60H.png";
+    
             Swal.fire({
                 html: `
-                    <div id="kartuSertifikatASN" class="card-certificate p-6 rounded-2xl text-white text-center shadow-2xl relative overflow-hidden">
-                        <div class="absolute -top-10 -right-10 w-32 h-32 bg-amber-400/20 rounded-full blur-xl"></div>
-                        <div class="flex justify-between items-center mb-4 border-b border-amber-400/30 pb-3">
-                            <div class="text-left">
-                                <h4 class="text-amber-400 font-bold text-sm tracking-wider uppercase">CABANG DINAS PENDIDIKAN WIL. IV</h4>
-                                <p class="text-[10px] text-slate-300">Sistem Presensi Terpadu</p>
-                            </div>
-                            <div class="w-10 h-10 bg-amber-400/20 border border-amber-400 rounded-full flex items-center justify-center text-amber-400 text-lg">
-                                <i class="fa-solid fa-award"></i>
-                            </div>
-                        </div>
+                    <div id="kartuSertifikatASN" class="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden border-2 border-amber-400/50 font-sans w-[800px] max-w-full mx-auto text-left" style="font-family: Arial, sans-serif;">
+                
+                          <!-- Background Decorative Glow -->
+                          <div class="absolute -top-20 -right-20 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                          <div class="absolute -bottom-20 -left-20 w-60 h-60 bg-blue-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
-                        <div class="my-4">
-                            <span class="bg-amber-400 text-slate-900 font-extrabold text-[10px] uppercase px-3 py-1 rounded-full shadow-md">
-                                ⭐ ASN TELADAN PRESENSI
-                            </span>
-                            <h3 class="text-lg font-extrabold text-white mt-3 leading-tight">${asn.nama}</h3>
-                            <p class="text-xs text-amber-200 mt-1">NIP: ${asn.nip}</p>
-                            <p class="text-xs text-slate-300 font-semibold mt-1"><i class="fa-solid fa-school mr-1"></i> ${asn.sekolah}</p>
-                        </div>
+                          <!-- Header Sertifikat -->
+                          <table style="width: 100%; margin-bottom: 20px; border-bottom: 1px solid rgba(251, 191, 36, 0.3); padding-bottom: 15px; position: relative; z-index: 10;">
+                              <tr>
+                                  <td style="width: 60px; padding-right: 15px;">
+                                      <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.1); border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.4); text-align: center; line-height: 56px;">
+                                          <img src="${logoSulsel}" alt="Logo Sulsel" style="max-height: 44px; display: inline-block; vertical-align: middle;" />
+                                      </div>
+                                  </td>
+                                  <td>
+                                      <h4 style="color: #fbbf24; font-weight: 900; font-size: 16px; letter-spacing: 1px; text-transform: uppercase; margin: 0;">CABANG&nbsp;DINAS&nbsp;PENDIDIKAN&nbsp;WIL.&nbsp;IV</h4>
+                                      <p style="color: #cbd5e1; font-weight: 500; font-size: 12px; margin: 4px 0 0 0;">Absensi&nbsp;Satuan&nbsp;Pendidikan&nbsp;Cabang&nbsp;Dinas&nbsp;Pendidikan&nbsp;Wil.&nbsp;IV</p>
+                                  </td>
+                              </tr>
+                          </table>
 
-                        <div class="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3 my-4 grid grid-cols-3 gap-2 text-center text-xs">
-                            <div class="border-r border-slate-700">
-                                <p class="text-[10px] text-slate-400">Kehadiran</p>
-                                <p class="font-bold text-emerald-400 text-sm">${asn.hadir || 0} Hari</p>
-                            </div>
-                            <div class="border-r border-slate-700">
-                                <p class="text-[10px] text-slate-400">Terlambat</p>
-                                <p class="font-bold text-amber-400 text-sm">${asn.terlambatMin || 0} Mnt</p>
-                            </div>
-                            <div>
-                                <p class="text-[10px] text-slate-400">Tanpa Ket.</p>
-                                <p class="font-bold text-emerald-400 text-sm">${asn.tanpaKet || 0} Hari</p>
-                            </div>
-                        </div>
+                          <!-- Badge ASN Teladan & Periode -->
+                          <div style="text-align: center; margin: 10px 0; position: relative; z-index: 10;">
+                              <span style="display: inline-block; background: linear-gradient(to right, #f59e0b, #facc15, #f59e0b); color: #020617; font-weight: 900; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; padding: 6px 20px; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #fcd34d;">
+                                  &#9733;&nbsp;ASN&nbsp;TELADAN&nbsp;PRESENSI
+                              </span>
+                              <p style="color: #fde047; font-weight: 600; font-size: 12px; letter-spacing: 0.5px; margin: 10px 0 0 0;">Periode&nbsp;Penilaian:&nbsp;${periodeTeks}</p>
+                          </div>
 
-                        <div class="flex justify-between items-end text-[9px] text-slate-400 border-t border-slate-700/50 pt-2">
-                            <span>Periode: ${bulanIni}</span>
-                            <span class="text-amber-400 font-semibold">Cabdin Wilayah IV</span>
-                        </div>
-                    </div>
-                `,
-                showCancelButton: true,
-                confirmButtonText: '<i class="fa-solid fa-download mr-1"></i> Unduh Gambar (PNG)',
-                cancelButtonText: 'Tutup',
-                confirmButtonColor: '#f59e0b',
-                customClass: { popup: 'p-2 rounded-2xl bg-transparent shadow-none' }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    let element = document.getElementById('kartuSertifikatASN');
-                    if (element && typeof html2canvas !== 'undefined') {
-                        html2canvas(element, { scale: 3 }).then(canvas => {
-                            let link = document.createElement('a');
-                            link.download = `Sertifikat_Presensi_${(asn.nama || 'ASN').replace(/\s+/g, '_')}.png`;
-                            link.href = canvas.toDataURL("image/png");
-                            link.click();
-                            Swal.fire('Berhasil!', 'Kartu Sertifikat diunduh.', 'success');
-                        });
-                    }
-                }
-            });
+                          <!-- Informasi Pemilik -->
+                          <div style="text-align: center; margin: 20px 0; position: relative; z-index: 10;">
+                              <h3 style="font-size: 24px; font-weight: 900; color: #ffffff; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">${asn.nama}</h3>
+                              <p style="font-size: 14px; color: #fde047; font-family: monospace; margin: 5px 0;">NIP:&nbsp;${asn.nip}</p>
+                              <div style="margin-top: 10px;">
+                              <span style="display: inline-block; font-size: 12px; color: #e2e8f0; font-weight: 600; background: rgba(30, 58, 138, 0.6); padding: 6px 16px; border-radius: 12px; border: 1px solid rgba(29, 78, 216, 0.5);">
+                                  &#127979;&nbsp;${asn.sekolah}
+                              </span>
+                          </div>
+                      </div>
+
+                      <!-- Grid Kehadiran -->
+                      <table style="width: 70%; margin: 20px auto; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 16px; position: relative; z-index: 10; text-align: center; border-collapse: collapse;">
+                          <tr>
+                              <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
+                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0; letter-spacing: 1px;">Kehadiran</p>
+                                  <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.hadir || 0}&nbsp;Hari</p>
+                              </td>
+                              <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
+                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0; letter-spacing: 1px;">Terlambat</p>
+                                  <p style="font-weight: 900; color: #fbbf24; font-size: 16px; margin: 5px 0 0 0;">${asn.terlambatMin || 0}&nbsp;Mnt</p>
+                              </td>
+                              <td style="padding: 15px; width: 33%;">
+                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0; letter-spacing: 1px;">Tanpa&nbsp;Ket.</p>
+                                  <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.tanpaKet || 0}&nbsp;Hari</p>
+                              </td>
+                          </tr>
+                      </table>
+
+                      <!-- Tanda Tangan & Footer -->
+                      <table style="width: 100%; margin-top: 25px; border-top: 1px solid #1e293b; padding-top: 15px; position: relative; z-index: 10;">
+                          <tr>
+                              <td style="vertical-align: bottom; width: 50%;">
+                                  <p style="color: #fbbf24; font-weight: 700; font-size: 12px; margin: 0;">Cabdin&nbsp;Wilayah&nbsp;IV&nbsp;Wajo-Sidrap</p>
+                                  <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Sistem&nbsp;Presensi&nbsp;&amp;&nbsp;Indisipliner&nbsp;Terpadu</p>
+                              </td>
+                              <td style="text-align: right; vertical-align: bottom; width: 50%;">
+                                  <p style="color: #cbd5e1; font-size: 12px; font-weight: 600; margin: 0 0 2px 0;">${ttdTanggal}</p>
+                                  <p style="color: #ffffff; font-size: 12px; font-weight: 700; margin: 0 0 10px 0;">Kepala&nbsp;Cabang&nbsp;Dinas&nbsp;Pendidikan&nbsp;Wil.&nbsp;IV</p>
+                            
+                                  <div style="display: inline-block; background: #ffffff; border-radius: 12px; padding: 8px; border: 1px solid #cbd5e1; text-align: left; margin-bottom: 10px;">
+                                      <table style="border-collapse: collapse;">
+                                          <tr>
+                                              <td style="padding-right: 8px;">
+                                                  <img src="${logoSulsel}" style="height: 32px; display: block;" />
+                                              </td>
+                                              <td>
+                                                  <p style="font-size: 9px; color: #1e3a8a; font-weight: 900; margin: 0; line-height: 1.2;">Pemerintah&nbsp;Provinsi</p>
+                                                  <p style="font-size: 10px; color: #0f172a; font-weight: 900; margin: 0; line-height: 1.2;">Sulawesi&nbsp;Selatan</p>
+                                                  <p style="font-size: 7px; color: #64748b; margin: 2px 0 0 0;">Dokumen&nbsp;ini&nbsp;ditandatangani&nbsp;secara&nbsp;digital</p>
+                                              </td>
+                                          </tr>
+                                      </table>
+                                  </div>
+
+                                  <p style="color: #fde047; font-size: 12px; font-weight: 900; letter-spacing: 0.5px; margin: 0;">DR.&nbsp;H.&nbsp;SETTARAMING,&nbsp;S.Pd.,&nbsp;M.Si</p>
+                                  <p style="color: #cbd5e1; font-size: 11px; font-family: monospace; margin: 2px 0 0 0;">NIP.&nbsp;197204031998011001</p>
+                              </td>
+                          </tr>
+                      </table>
+                  </div>
+              `,
+              showCancelButton: true,
+              confirmButtonText: '<i class="fa-solid fa-download mr-1"></i> Unduh Gambar (PNG)',
+              cancelButtonText: 'Tutup',
+              confirmButtonColor: '#f59e0b',
+              width: '860px',
+              customClass: { popup: 'p-2 rounded-3xl bg-transparent shadow-none' }
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  let element = document.getElementById('kartuSertifikatASN');
+                  if (element && typeof html2canvas !== 'undefined') {
+                      html2canvas(element, { 
+                          scale: 3, 
+                          useCORS: true,
+                          backgroundColor: null 
+                      }).then(canvas => {
+                          let link = document.createElement('a');
+                          link.download = `Sertifikat_Presensi_${(asn.nama || 'ASN').replace(/\s+/g, '_')}.png`;
+                          link.href = canvas.toDataURL("image/png");
+                          link.click();
+                          Swal.fire('Berhasil!', 'Kartu Sertifikat Landscape berhasil diunduh.', 'success');
+                      });
+                  }
+              }
+          });
         }
 
         function renderDataSekolah(container) {
