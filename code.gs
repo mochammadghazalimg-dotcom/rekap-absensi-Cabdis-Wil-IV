@@ -114,7 +114,7 @@ function ambilSemuaDataFromSheet() {
   }
 }
 
-// --- FUNGSI PROSES BACKUP DAN RESET BULANAN KETAT DENGAN DOUBLE CHECK DATA ---
+// --- FUNGSI PROSES BACKUP DAN RESET BULANAN KETAT DENGAN URUTAN ALUR PERSIS ---
 function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
   try {
     const ssSource = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -128,10 +128,6 @@ function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
     let dataLog = sheetLog.getDataRange().getValues();
     let dataRekap = sheetRekap.getDataRange().getValues();
     
-    if (dataLog.length <= 1 && dataRekap.length <= 1) {
-      return { status: 'no_data', message: 'Data absensi masih kosong.' };
-    }
-    
     let now = new Date();
     if (!targetBulan) { 
       targetBulan = now.getMonth(); 
@@ -144,11 +140,46 @@ function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
     let namaSheetLogBaru = `Log_Harian_${labelWaktu}`;
     let namaSheetRekapBaru = `Rekap_Absen_${labelWaktu}`;
     
+    // Cek apakah data bulan ini sudah pernah dibackup ke Spreadsheet 2
     if (ssBackup.getSheetByName(namaSheetLogBaru) || ssBackup.getSheetByName(namaSheetRekapBaru)) {
       return { status: 'already_backed_up', message: 'Data bulan ini sudah pernah dibackup sebelumnya.' };
     }
 
-    // STEP 1: SIMPAN SNAPSHOT DASHBOARD KE 'Arsip_Dashboard' DAHULU
+    if (dataLog.length <= 1 && dataRekap.length <= 1) {
+      return { status: 'no_data', message: 'Data absensi masih kosong.' };
+    }
+
+    // ALUR A: BACKUP DATA MENTAH KE SPREADSHEET 2 (Database Arsip Absensi)
+    let backupLogSheet = ssBackup.insertSheet(namaSheetLogBaru);
+    let backupRekapSheet = ssBackup.insertSheet(namaSheetRekapBaru);
+    
+    if (dataLog.length > 0) backupLogSheet.getRange(1, 1, dataLog.length, dataLog[0].length).setValues(dataLog);
+    if (dataRekap.length > 0) backupRekapSheet.getRange(1, 1, dataRekap.length, dataRekap[0].length).setValues(dataRekap);
+    
+    SpreadsheetApp.flush(); 
+    
+    // ALUR B: PEMERIKSAAN KETAT KELENGKAPAN DATA (Double Check)
+    let verifLog = backupLogSheet.getDataRange().getValues();
+    let verifRekap = backupRekapSheet.getDataRange().getValues();
+    
+    let isLogRowsValid = (verifLog.length === dataLog.length) && (verifLog[0].length === dataLog[0].length);
+    let isRekapRowsValid = (verifRekap.length === dataRekap.length) && (verifRekap[0].length === dataRekap[0].length);
+    
+    let lastRowLogIdx = dataLog.length - 1;
+    let isLogContentValid = (String(verifLog[lastRowLogIdx][0]) === String(dataLog[lastRowLogIdx][0]));
+    let lastRowRekapIdx = dataRekap.length - 1;
+    let isRekapContentValid = (String(verifRekap[lastRowRekapIdx][0]) === String(dataRekap[lastRowRekapIdx][0]));
+    
+    let isBackupValid = isLogRowsValid && isRekapRowsValid && isLogContentValid && isRekapContentValid;
+
+    if (!isBackupValid) {
+      // Jika data ada yang tertinggal/tidak cocok, hapus sheet backup (rollback)
+      ssBackup.deleteSheet(backupLogSheet);
+      ssBackup.deleteSheet(backupRekapSheet);
+      return { status: 'fail', message: 'Verifikasi backup gagal. Data tidak cocok.' };
+    }
+
+    // ALUR C: JIKA BACKUP BENAR LENGKAP -> LAKUKAN SNAPSHOT DASHBOARD KE SHEET Arsip_Dashboard
     let snapshotBerhasil = false;
     if (snapshotJSON) {
       let sheetArsip = ssSource.getSheetByName('Arsip_Dashboard');
@@ -160,7 +191,7 @@ function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
       let dataA = sheetArsip.getDataRange().getValues();
       let rowIndex = -1;
       for (let i = 1; i < dataA.length; i++) {
-        if (dataA[i][0] == id_periode) { rowIndex = i + 1; break; }
+        if (String(dataA[i][0]) === String(id_periode)) { rowIndex = i + 1; break; }
       }
       if (rowIndex > -1) {
         sheetArsip.getRange(rowIndex, 2, 1, 3).setValues([[targetBulan, targetTahun, snapshotJSON]]);
@@ -168,43 +199,20 @@ function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
         sheetArsip.appendRow([id_periode, targetBulan, targetTahun, snapshotJSON]);
       }
       SpreadsheetApp.flush();
-      snapshotBerhasil = true;
+
+      // ALUR D: PERIKSA SHEET Arsip_Dashboard JIKA BENAR SUDAH TERSIMPAN DAN TERKUNCI
+      let verifArsip = sheetArsip.getDataRange().getValues();
+      snapshotBerhasil = verifArsip.some(row => String(row[0]) === String(id_periode) && row[3] !== '');
     }
-    
-    // STEP 2: COPY DATA MENTAH KE SPREADSHEET BACKUP
-    let backupLogSheet = ssBackup.insertSheet(namaSheetLogBaru);
-    let backupRekapSheet = ssBackup.insertSheet(namaSheetRekapBaru);
-    
-    if (dataLog.length > 0) backupLogSheet.getRange(1, 1, dataLog.length, dataLog[0].length).setValues(dataLog);
-    if (dataRekap.length > 0) backupRekapSheet.getRange(1, 1, dataRekap.length, dataRekap[0].length).setValues(dataRekap);
-    
-    SpreadsheetApp.flush(); 
-    
-    // STEP 3: PENGECEKAN KETAT (POIN 1)
-    let verifLog = backupLogSheet.getDataRange().getValues();
-    let verifRekap = backupRekapSheet.getDataRange().getValues();
-    
-    // 3.1 Cek Jumlah Baris & Kolom
-    let isLogRowsValid = (verifLog.length === dataLog.length) && (verifLog[0].length === dataLog[0].length);
-    let isRekapRowsValid = (verifRekap.length === dataRekap.length) && (verifRekap[0].length === dataRekap[0].length);
-    
-    // 3.2 Cek Sampel Isi Data (Elemen Pertama & Terakhir)
-    let lastRowLogIdx = dataLog.length - 1;
-    let isLogContentValid = (String(verifLog[lastRowLogIdx][0]) === String(dataLog[lastRowLogIdx][0]));
-    
-    let lastRowRekapIdx = dataRekap.length - 1;
-    let isRekapContentValid = (String(verifRekap[lastRowRekapIdx][0]) === String(dataRekap[lastRowRekapIdx][0]));
-    
-    if (snapshotBerhasil && isLogRowsValid && isRekapRowsValid && isLogContentValid && isRekapContentValid) {
-      // DIPASTIKAN 100% PERSIS DAN SAMA, BARU DATA SUMBER KITA KOSONGKAN
+
+    // ALUR E: JIKA SNAPSHOT SUDAH BENAR TERSIMPAN & TERKUNCI -> BARU HAPUS DATA MENTAH DIBULAN LALU
+    if (snapshotBerhasil) {
       if (dataLog.length > 1) sheetLog.getRange(2, 1, dataLog.length - 1, dataLog[0].length).clearContent();
       if (dataRekap.length > 1) sheetRekap.getRange(2, 1, dataRekap.length - 1, dataRekap[0].length).clearContent();
-      return { status: 'success' };
+      SpreadsheetApp.flush();
+      return { status: 'success', message: 'Backup & Snapshot berhasil dikunci. Data berhasil di-reset.' };
     } else {
-      // JIKA ADA PERSIS 1 BARIS ATAU DATA TERTINGGAL, ROLLBACK SPREADSHEET 2
-      ssBackup.deleteSheet(backupLogSheet);
-      ssBackup.deleteSheet(backupRekapSheet);
-      return { status: 'fail', message: 'Verifikasi backup gagal. Data tidak cocok.' };
+      return { status: 'fail', message: 'Penyimpanan Snapshot ke Arsip_Dashboard gagal. Reset dibatalkan.' };
     }
   } catch(e) {
     return { status: 'fail', error: e.message };
