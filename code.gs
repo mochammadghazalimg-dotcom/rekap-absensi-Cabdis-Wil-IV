@@ -15,7 +15,6 @@ function ambilSemuaDataFromSheet() {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     
-    // 1. Data Sekolah
     let sheetSekolah = ss.getSheetByName('Data_Sekolah') || ss.getSheetByName('Data Sekolah');
     let dataSekolah = [];
     if (sheetSekolah) {
@@ -23,16 +22,12 @@ function ambilSemuaDataFromSheet() {
       if (raw.length > 1) {
         raw.shift();
         dataSekolah = raw.filter(row => row[0] || row[1]).map(row => ({
-          id: row[0] || Date.now() + Math.random(),
-          nama: String(row[1] || row[0] || '').trim(),
-          npsn: String(row[2] || '').trim(),
-          kepsek: String(row[3] || '').trim(),
-          nip: String(row[4] || '').replace(/['\s]/g, '').trim()
+          id: row[0] || Date.now() + Math.random(), nama: String(row[1] || row[0] || '').trim(),
+          npsn: String(row[2] || '').trim(), kepsek: String(row[3] || '').trim(), nip: String(row[4] || '').replace(/['\s]/g, '').trim()
         }));
       }
     }
 
-    // 2. Data Rekap Absensi
     let sheetRekap = ss.getSheetByName('Rekap_Absen') || ss.getSheetByName('Rekap Absensi');
     let dataAbsensi = [];
     if (sheetRekap) {
@@ -40,20 +35,13 @@ function ambilSemuaDataFromSheet() {
       if (raw.length > 1) {
         raw.shift();
         dataAbsensi = raw.filter(row => row[0] || row[1]).map(row => ({
-          nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
-          nama: String(row[1] || '').trim(),
-          sekolah: String(row[2] || '').trim(),
-          hariKerja: parseInt(row[3]) || 0,
-          hadir: parseInt(row[4]) || 0,
-          terlambatMin: parseInt(row[5]) || 0,
-          cepatPulangMin: parseInt(row[6]) || 0,
-          izinSakit: parseInt(row[7]) || 0,
-          tanpaKet: parseInt(row[8]) || 0
+          nip: String(row[0] || '').replace(/['\s]/g, '').trim(), nama: String(row[1] || '').trim(), sekolah: String(row[2] || '').trim(),
+          hariKerja: parseInt(row[3]) || 0, hadir: parseInt(row[4]) || 0, terlambatMin: parseInt(row[5]) || 0,
+          cepatPulangMin: parseInt(row[6]) || 0, izinSakit: parseInt(row[7]) || 0, tanpaKet: parseInt(row[8]) || 0
         }));
       }
     }
 
-    // 3. Master Data Pegawai ASN
     let sheetPegawai = ss.getSheetByName('Data_Pegawai') || ss.getSheetByName('Data Pegawai');
     let dataPegawai = [];
     if (sheetPegawai) {
@@ -61,15 +49,12 @@ function ambilSemuaDataFromSheet() {
       if (raw.length > 1) {
         raw.shift();
         dataPegawai = raw.filter(row => row[0] || row[1]).map(row => ({
-          nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
-          nama: String(row[1] || '').trim(),
-          sekolah: String(row[2] || '').trim(),
-          photo_uploaded: String(row[3] || 'False').trim()
+          nip: String(row[0] || '').replace(/['\s]/g, '').trim(), nama: String(row[1] || '').trim(),
+          sekolah: String(row[2] || '').trim(), photo_uploaded: String(row[3] || 'False').trim()
         }));
       }
     }
 
-    // 4. Data Log Harian
     let sheetLog = ss.getSheetByName('Log_Harian');
     let dataLogHarian = [];
     if (sheetLog) {
@@ -77,29 +62,112 @@ function ambilSemuaDataFromSheet() {
       if (raw.length > 1) {
         raw.shift();
         dataLogHarian = raw.filter(row => row[0]).map(row => {
-          let yr = parseInt(row[4]) || 0;
-          if (yr > 0 && yr < 100) yr += 2000;
-
+          let yr = parseInt(row[4]) || 0; if (yr > 0 && yr < 100) yr += 2000;
           return {
-            nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
-            nama: String(row[1] || '').trim(),
-            sekolah: String(row[2] || '').trim(),
-            tanggalStr: String(row[3] || '').trim(),
-            yyyy: yr,
-            mm: parseInt(row[5]) || 0,
-            dd: parseInt(row[6]) || 0,
-            hadir: parseInt(row[7]) || 0,
-            terlambatMin: parseInt(row[8]) || 0,
-            cepatPulangMin: parseInt(row[9]) || 0,
-            izinSakit: parseInt(row[10]) || 0
+            nip: String(row[0] || '').replace(/['\s]/g, '').trim(), nama: String(row[1] || '').trim(), sekolah: String(row[2] || '').trim(),
+            tanggalStr: String(row[3] || '').trim(), yyyy: yr, mm: parseInt(row[5]) || 0, dd: parseInt(row[6]) || 0,
+            hadir: parseInt(row[7]) || 0, terlambatMin: parseInt(row[8]) || 0, cepatPulangMin: parseInt(row[9]) || 0, izinSakit: parseInt(row[10]) || 0
           };
         });
       }
     }
 
-    return { sekolah: dataSekolah, absensi: dataAbsensi, pegawai: dataPegawai, logHarian: dataLogHarian };
+    // ARSIP DASHBOARD (Data Tersimpan)
+    let sheetArsip = ss.getSheetByName('Arsip_Dashboard');
+    let dataArsip = [];
+    if (sheetArsip) {
+      let raw = sheetArsip.getDataRange().getValues();
+      if (raw.length > 1) {
+        raw.shift();
+        dataArsip = raw.filter(row => row[0]).map(row => ({
+          id_periode: String(row[0] || ''), bulan: parseInt(row[1]) || 0, tahun: parseInt(row[2]) || 0, snapshot: String(row[3] || '')
+        }));
+      }
+    }
+
+    return { sekolah: dataSekolah, absensi: dataAbsensi, pegawai: dataPegawai, logHarian: dataLogHarian, arsip: dataArsip };
   } catch(err) {
-    return { error: err.message, sekolah: [], absensi: [], pegawai: [], logHarian: [] };
+    return { error: err.message, sekolah: [], absensi: [], pegawai: [], logHarian: [], arsip: [] };
+  }
+}
+
+// --- FUNGSI SISTEM BACKUP & RESET BULANAN OTOMATIS/MANUAL ---
+// Menerima data snapshot dari UI
+function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
+  try {
+    const ssSource = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const ssBackup = SpreadsheetApp.openById(BACKUP_SPREADSHEET_ID);
+    
+    let sheetLog = ssSource.getSheetByName('Log_Harian');
+    let sheetRekap = ssSource.getSheetByName('Rekap_Absen') || ssSource.getSheetByName('Rekap Absensi');
+    
+    if (!sheetLog || !sheetRekap) return { status: 'error', message: 'Sheet sumber tidak ditemukan.' };
+    
+    let dataLog = sheetLog.getDataRange().getValues();
+    let dataRekap = sheetRekap.getDataRange().getValues();
+    
+    if (dataLog.length <= 1 && dataRekap.length <= 1) {
+      return { status: 'no_data', message: 'Data absensi masih kosong.' };
+    }
+    
+    // Gunakan bulan dan tahun yang dikirim dari UI (fallback jika tidak ada)
+    let now = new Date();
+    if(!targetBulan) { targetBulan = now.getMonth(); targetTahun = now.getFullYear(); if(targetBulan===0){ targetBulan=12; targetTahun-=1; } }
+    
+    let namaBulanBck = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
+    let labelWaktu = `${namaBulanBck[targetBulan - 1]}_${targetTahun}`; 
+    let namaSheetLogBaru = `Log_Harian_${labelWaktu}`;
+    let namaSheetRekapBaru = `Rekap_Absen_${labelWaktu}`;
+    
+    if (ssBackup.getSheetByName(namaSheetLogBaru) || ssBackup.getSheetByName(namaSheetRekapBaru)) {
+      return { status: 'already_backed_up', message: 'Data bulan ini sudah pernah dibackup sebelumnya.' };
+    }
+    
+    // --- PROSES COPY ---
+    let backupLogSheet = ssBackup.insertSheet(namaSheetLogBaru);
+    let backupRekapSheet = ssBackup.insertSheet(namaSheetRekapBaru);
+    if (dataLog.length > 0) backupLogSheet.getRange(1, 1, dataLog.length, dataLog[0].length).setValues(dataLog);
+    if (dataRekap.length > 0) backupRekapSheet.getRange(1, 1, dataRekap.length, dataRekap[0].length).setValues(dataRekap);
+    
+    SpreadsheetApp.flush(); 
+    
+    let verifLog = backupLogSheet.getDataRange().getValues();
+    let verifRekap = backupRekapSheet.getDataRange().getValues();
+    
+    if (verifLog.length === dataLog.length && verifRekap.length === dataRekap.length) {
+      
+      // 1. SIMPAN SNAPSHOT DASHBOARD KE ARSIP SEBELUM DIHAPUS
+      if (snapshotJSON) {
+        let sheetArsip = ssSource.getSheetByName('Arsip_Dashboard');
+        if (!sheetArsip) {
+          sheetArsip = ssSource.insertSheet('Arsip_Dashboard');
+          sheetArsip.appendRow(['ID_Periode', 'Bulan', 'Tahun', 'Data_Snapshot']);
+        }
+        let id_periode = `${targetBulan}_${targetTahun}`;
+        let dataA = sheetArsip.getDataRange().getValues();
+        let rowIndex = -1;
+        for(let i=1; i<dataA.length; i++){
+          if(dataA[i][0] == id_periode) { rowIndex = i + 1; break; }
+        }
+        if (rowIndex > -1) {
+          sheetArsip.getRange(rowIndex, 2, 1, 3).setValues([[targetBulan, targetTahun, snapshotJSON]]);
+        } else {
+          sheetArsip.appendRow([id_periode, targetBulan, targetTahun, snapshotJSON]);
+        }
+      }
+
+      // 2. KOSONGKAN DATA
+      if (dataLog.length > 1) sheetLog.getRange(2, 1, dataLog.length - 1, dataLog[0].length).clearContent();
+      if (dataRekap.length > 1) sheetRekap.getRange(2, 1, dataRekap.length - 1, dataRekap[0].length).clearContent();
+      return { status: 'success' };
+      
+    } else {
+      ssBackup.deleteSheet(backupLogSheet);
+      ssBackup.deleteSheet(backupRekapSheet);
+      return { status: 'fail' };
+    }
+  } catch(e) {
+    return { status: 'fail', error: e.message };
   }
 }
 
