@@ -1,4 +1,6 @@
 const SPREADSHEET_ID = '1vgTDc8Ut8mlwAn_U-OOrDpRVAS1HcBEnfmmAs3u8Vlw';
+// ID SPREADSHEET KE 2 (UNTUK BACKUP BULANAN) YANG SUDAH DIUPDATE
+const BACKUP_SPREADSHEET_ID = '1xRDKpYo-JeKKIXzC3s_rCRanv_9dPAqlu1npOVw3kRM'; 
 
 function doGet(e) {
   return HtmlService.createTemplateFromFile('index')
@@ -8,7 +10,7 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// --- AMBIL SEMUA DATA DARI GOOGLE SPREADSHEET (SEKOLAH, ABSENSI, PEGAWAI, LOG HARIAN) ---
+// --- AMBIL SEMUA DATA DARI GOOGLE SPREADSHEET ---
 function ambilSemuaDataFromSheet() {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -67,7 +69,7 @@ function ambilSemuaDataFromSheet() {
       }
     }
 
-    // 4. Data Log Harian (Perbaikan Auto Normalisasi Tahun 26 -> 2026)
+    // 4. Data Log Harian
     let sheetLog = ss.getSheetByName('Log_Harian');
     let dataLogHarian = [];
     if (sheetLog) {
@@ -76,7 +78,7 @@ function ambilSemuaDataFromSheet() {
         raw.shift();
         dataLogHarian = raw.filter(row => row[0]).map(row => {
           let yr = parseInt(row[4]) || 0;
-          if (yr > 0 && yr < 100) yr += 2000; // Mengubah tahun 26 menjadi 2026
+          if (yr > 0 && yr < 100) yr += 2000;
 
           return {
             nip: String(row[0] || '').replace(/['\s]/g, '').trim(),
@@ -101,7 +103,82 @@ function ambilSemuaDataFromSheet() {
   }
 }
 
-// --- SIMPAN MASTER DATA PEGAWAI KE SPREADSHEET ---
+// --- FUNGSI SISTEM BACKUP & RESET BULANAN OTOMATIS/MANUAL ---
+function prosesBackupDanResetBulanan() {
+  try {
+    const ssSource = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const ssBackup = SpreadsheetApp.openById(BACKUP_SPREADSHEET_ID);
+    
+    let sheetLog = ssSource.getSheetByName('Log_Harian');
+    let sheetRekap = ssSource.getSheetByName('Rekap_Absen') || ssSource.getSheetByName('Rekap Absensi');
+    
+    if (!sheetLog || !sheetRekap) return { status: 'error', message: 'Sheet sumber tidak ditemukan.' };
+    
+    let dataLog = sheetLog.getDataRange().getValues();
+    let dataRekap = sheetRekap.getDataRange().getValues();
+    
+    // Jika data masih kosong, jangan proses
+    if (dataLog.length <= 1 && dataRekap.length <= 1) {
+      return { status: 'no_data', message: 'Data absensi masih kosong.' };
+    }
+    
+    // Tentukan Nama Sheet Berdasarkan Bulan & Tahun Saat Ini / Bulan Sebelumnya
+    let now = new Date();
+    let prevMonth = now.getMonth(); // 0-11
+    let year = now.getFullYear();
+    // Jika dijalankan di bulan Januari, berarti backup bulan Desember tahun lalu
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      year -= 1;
+    }
+    
+    let namaBulanBck = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
+    let labelWaktu = `${namaBulanBck[prevMonth - 1]}_${year}`; 
+    
+    let namaSheetLogBaru = `Log_Harian_${labelWaktu}`;
+    let namaSheetRekapBaru = `Rekap_Absen_${labelWaktu}`;
+    
+    // Cegah Double Backup
+    if (ssBackup.getSheetByName(namaSheetLogBaru) || ssBackup.getSheetByName(namaSheetRekapBaru)) {
+      return { status: 'already_backed_up', message: 'Data bulan ini sudah pernah dibackup sebelumnya.' };
+    }
+    
+    // --- 1. PROSES COPY / BACKUP DATA ---
+    let backupLogSheet = ssBackup.insertSheet(namaSheetLogBaru);
+    let backupRekapSheet = ssBackup.insertSheet(namaSheetRekapBaru);
+    
+    if (dataLog.length > 0) backupLogSheet.getRange(1, 1, dataLog.length, dataLog[0].length).setValues(dataLog);
+    if (dataRekap.length > 0) backupRekapSheet.getRange(1, 1, dataRekap.length, dataRekap[0].length).setValues(dataRekap);
+    
+    SpreadsheetApp.flush(); // Eksekusi tulis sekarang juga
+    
+    // --- 2. VERIFIKASI KEBERHASILAN COPY ---
+    let verifLog = backupLogSheet.getDataRange().getValues();
+    let verifRekap = backupRekapSheet.getDataRange().getValues();
+    
+    // Memeriksa apakah jumlah baris data di Spreadsheet 2 persis sama dengan Spreadsheet 1
+    if (verifLog.length === dataLog.length && verifRekap.length === dataRekap.length) {
+      // --- 3. RESET DATA SUMBER DI SPREADSHEET 1 (Sisakan hanya Header Baris 1) ---
+      if (dataLog.length > 1) {
+        sheetLog.getRange(2, 1, dataLog.length - 1, dataLog[0].length).clearContent();
+      }
+      if (dataRekap.length > 1) {
+        sheetRekap.getRange(2, 1, dataRekap.length - 1, dataRekap[0].length).clearContent();
+      }
+      return { status: 'success' };
+      
+    } else {
+      // --- 4. ROLLBACK (BATALKAN PROSES JIKA ADA DATA YANG TERLEWAT) ---
+      ssBackup.deleteSheet(backupLogSheet);
+      ssBackup.deleteSheet(backupRekapSheet);
+      return { status: 'fail' };
+    }
+    
+  } catch(e) {
+    return { status: 'fail', error: e.message };
+  }
+}
+
 function simpanDataPegawaiKeSheet(listPegawai) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -116,29 +193,21 @@ function simpanDataPegawaiKeSheet(listPegawai) {
     }
     sheet.getRange(1, 1, rows.length, 4).setValues(rows);
     return "OK";
-  } catch(e) {
-    return "Error: " + e.message;
-  }
+  } catch(e) { return "Error: " + e.message; }
 }
 
-// --- SIMPAN DATA SEKOLAH KE SPREADSHEET ---
 function simpanDataSekolahKeSheet(listSekolah) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     let sheet = ss.getSheetByName('Data_Sekolah') || ss.getSheetByName('Data Sekolah') || ss.insertSheet('Data_Sekolah');
     sheet.clearContents();
     let rows = [['ID', 'Nama_Sekolah', 'NPSN', 'Nama_Kepsek', 'NIP_Kepsek']];
-    if (listSekolah && listSekolah.length > 0) {
-      listSekolah.forEach(s => rows.push([s.id, s.nama, s.npsn, s.kepsek, s.nip]));
-    }
+    if (listSekolah && listSekolah.length > 0) listSekolah.forEach(s => rows.push([s.id, s.nama, s.npsn, s.kepsek, s.nip]));
     sheet.getRange(1, 1, rows.length, 5).setValues(rows);
     return "OK";
-  } catch(e) {
-    return "Error: " + e.message;
-  }
+  } catch(e) { return "Error: " + e.message; }
 }
 
-// --- SIMPAN REKAP ABSEN KE SPREADSHEET ---
 function simpanRekapAbsenKeSheet(listAbsensi) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -153,12 +222,9 @@ function simpanRekapAbsenKeSheet(listAbsensi) {
     }
     sheet.getRange(1, 1, rows.length, 9).setValues(rows);
     return "OK";
-  } catch(e) {
-    return "Error: " + e.message;
-  }
+  } catch(e) { return "Error: " + e.message; }
 }
 
-// --- SIMPAN LOG HARIAN KE SPREADSHEET ---
 function simpanLogHarianKeSheet(listLog) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -175,12 +241,9 @@ function simpanLogHarianKeSheet(listLog) {
     }
     sheet.getRange(1, 1, rows.length, 11).setValues(rows);
     return "OK";
-  } catch(e) {
-    return "Error: " + e.message;
-  }
+  } catch(e) { return "Error: " + e.message; }
 }
 
-// --- FUNGSI KALENDER LIBUR ---
 function getLiburOtomatisDariGoogle(tahun) {
   try {
     var cal = CalendarApp.getCalendarById('id.indonesian#holiday@group.v.calendar.google.com');
@@ -191,7 +254,5 @@ function getLiburOtomatisDariGoogle(tahun) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     });
     return [...new Set(liburArray)];
-  } catch (e) { 
-    return []; 
-  }
+  } catch (e) { return []; }
 }
