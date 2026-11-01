@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistem Rekap Absensi & Indisipliner - Cabdin Wil IV</title>
@@ -75,7 +75,7 @@
         let dummyAbsensi = [];      
         let dummyPegawai = []; 
         let dummyLogHarian = []; 
-        let dummyArsip = []; // VARIABEL BARU UNTUK MENYIMPAN ARSIP
+        let dummyArsip = []; 
         let currentChart = null;
         let currentPieChart = null;
 
@@ -116,7 +116,7 @@
                             if (db.absensi && db.absensi.length > 0) dummyAbsensi = db.absensi;
                             if (db.pegawai && db.pegawai.length > 0) dummyPegawai = db.pegawai;
                             if (db.logHarian && db.logHarian.length > 0) dummyLogHarian = db.logHarian;
-                            if (db.arsip && db.arsip.length > 0) dummyArsip = db.arsip; // MEMUAT ARSIP
+                            if (db.arsip && db.arsip.length > 0) dummyArsip = db.arsip; 
                         }
                         switchView('dashboard');
                     })
@@ -130,19 +130,15 @@
             }
         };
 
-        // --- SISTEM PENGECEKAN BACKUP DI AWAL BULAN ---
         function periksaBackupOtomatis() {
             let tglHariIni = new Date().getDate();
             if (tglHariIni >= 1 && tglHariIni <= 3) {
                 if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    
-                    // Ambil target bulan lalu untuk dibackup
                     let now = new Date();
                     let targetBulan = now.getMonth(); 
                     let targetTahun = now.getFullYear();
                     if (targetBulan === 0) { targetBulan = 12; targetTahun -= 1; }
                     
-                    // Generate Snapshot paksa dari data mentah sebelum dikosongkan
                     let snapshotObj = getDashboardData(targetBulan, targetTahun, true);
                     let snapshotJSON = JSON.stringify(snapshotObj);
 
@@ -150,8 +146,6 @@
                         .withSuccessHandler(function(res) {
                             if (res.status === 'success') {
                                 Swal.fire({ icon: 'success', title: 'Sistem Teroptimasi', html: '<b style="color:#166534">Data BERHASIL dibackup ke Arsip.</b>', background: '#dcfce7' });
-                            } else if (res.status === 'fail') {
-                                Swal.fire({ icon: 'warning', title: 'Peringatan Sistem!', html: '<b style="color:#991b1b">Data GAGAL dibackup. Coba manual.</b>', background: '#fee2e2' });
                             }
                         })
                         .prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun);
@@ -159,7 +153,6 @@
             }
         }
 
-        // --- FUNGSI TOMBOL BACKUP MANUAL ---
         function backupManual() {
             Swal.fire({
                 title: 'Backup & Kosongkan Data',
@@ -174,8 +167,6 @@
                     Swal.fire({ title: 'Memproses Backup...', html: 'Mengamankan Snapshot & Arsip. Mohon tunggu.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
                     
                     if (typeof google !== 'undefined' && google.script && google.script.run) {
-                        
-                        // Siapkan Snapshot bulan lalu (karena kita backup bulan lalu)
                         let now = new Date();
                         let targetBulan = now.getMonth(); 
                         let targetTahun = now.getFullYear();
@@ -187,9 +178,7 @@
                         google.script.run
                             .withSuccessHandler(function(res) {
                                 if (res.status === 'success') {
-                                    Swal.fire({ icon: 'success', title: 'Berhasil!', html: '<b style="color:#166534">Data BERHASIL dibackup ke Sheet ke 2 & Snapshot tersimpan.</b>', background: '#dcfce7' }).then(() => location.reload());
-                                } else if (res.status === 'fail') {
-                                    Swal.fire({ icon: 'warning', title: 'Gagal!', html: '<b style="color:#991b1b">Gagal membackup.</b>', background: '#fee2e2' });
+                                    Swal.fire({ icon: 'success', title: 'Berhasil!', html: '<b style="color:#166534">Data BERHASIL dibackup ke Sheet & Snapshot tersimpan.</b>', background: '#dcfce7' }).then(() => location.reload());
                                 } else if (res.status === 'already_backed_up' || res.status === 'no_data') {
                                     Swal.fire('Info Sistem', res.message, 'info');
                                 }
@@ -201,10 +190,12 @@
             });
         }
 
-        function hitungHariKerjaBulanIni(year, month) {
+        function hitungHariKerjaBulanIni(year, month, maxDay = null) {
             let totalWorkdays = 0;
             let daysInMonth = new Date(year, month, 0).getDate();
-            for (let d = 1; d <= daysInMonth; d++) {
+            let limitDay = maxDay ? Math.min(maxDay, daysInMonth) : daysInMonth;
+
+            for (let d = 1; d <= limitDay; d++) {
                 let dateObj = new Date(year, month - 1, d);
                 let dayOfWeek = dateObj.getDay();
                 let yyyy = dateObj.getFullYear();
@@ -244,231 +235,35 @@
             }, 100);
         }
 
-        function renderDataPegawai(container) {
-            if(!container) return;
-            
-            // --- MODIFIKASI DEFAULT SMAN 1 WAJO ---
-            let wajoSchoolPeg = dummySekolah.find(s => s.nama.toUpperCase().includes('SMAN 1 WAJO'));
-            let wajoNamaPeg = wajoSchoolPeg ? wajoSchoolPeg.nama : "SMAN 1 WAJO";
-
-            let sekolahOptions = `<option value="ALL">Semua Sekolah</option>` + 
-                dummySekolah.map(s => `<option value="${s.nama}" ${s.nama === wajoNamaPeg ? 'selected' : ''}>${s.nama}</option>`).join('');
-            
-            if (!wajoSchoolPeg) {
-                sekolahOptions = `<option value="SMAN 1 WAJO" selected>SMAN 1 WAJO</option>` + sekolahOptions;
-            }
-            // --------------------------------------
-
-            container.innerHTML = `
-                <div class="glass-card p-6">
-                    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-                        <div>
-                            <h3 class="font-bold text-slate-700 text-lg">Master Data Pegawai ASN</h3>
-                            <p class="text-xs text-slate-500">Basis data acuan pegawai untuk presensi seluruh sekolah Cabdin Wil. IV</p>
-                        </div>
-                        <div class="flex gap-2 flex-wrap items-center">
-                            <select id="filterSekolahPegawai" onchange="renderTabelPegawai()" class="p-2 border border-slate-300 rounded text-sm min-w-[200px]">
-                                ${sekolahOptions}
-                            </select>
-                            <input type="file" id="uploadCSVPegawai" accept=".csv" class="hidden" onchange="prosesUploadPegawaiCSV(event)" />
-                            <!-- TAMBAHKAN TOMBOL TEMPLATE DI SINI -->
-                            <button onclick="downloadTemplatePegawai()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
-                                <i class="fa-solid fa-download"></i> Template
-                            </button>
-                            <button onclick="document.getElementById('uploadCSVPegawai').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
-                                <i class="fa-solid fa-file-csv"></i> Unggah CSV Pegawai
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-bold">
-                                    <th class="p-3 text-center w-12 border-b">No</th>
-                                    <th class="p-3 border-b">NIP</th>
-                                    <th class="p-3 border-b">Nama Pegawai</th>
-                                    <th class="p-3 border-b">Sekolah</th>
-                                    <th class="p-3 text-center border-b">Foto Acuan</th>
-                                    <!-- TAMBAHAN: Kolom Aksi -->
-                                    <th class="p-3 text-center border-b w-24">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bodyPegawai"></tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-            renderTabelPegawai();
-        }
-
-        function renderTabelPegawai() {
-            const filterVal = document.getElementById('filterSekolahPegawai') ? document.getElementById('filterSekolahPegawai').value : "ALL";
-            const tbody = document.getElementById('bodyPegawai');
-            if(!tbody) return;
-
-            let filtered = dummyPegawai;
-            if (filterVal !== "ALL") {
-                filtered = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(filterVal.toUpperCase()));
-            }
-
-            if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 text-sm">Belum ada data pegawai. Silakan unggah CSV Data Pegawai.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = filtered.map((p, i) => `
-                <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
-                    <td class="p-3 text-center text-slate-500">${i+1}</td>
-                    <td class="p-3 font-semibold text-slate-800">${p.nip}</td>
-                    <td class="p-3 font-semibold text-blue-950">${p.nama}</td>
-                    <td class="p-3 text-slate-600">${p.sekolah || '-'}</td>
-                    <td class="p-3 text-center">
-                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
-                            ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'Tersedia' : 'Belum Ada'}
-                        </span>
-                    </td>
-                    <!-- TAMBAHAN: Tombol Edit -->
-                    <td class="p-3 text-center">
-                        <button onclick="editPegawai('${p.nip}')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs"><i class="fa-solid fa-pen"></i> Edit</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        function editPegawai(nip) {
-            let p = dummyPegawai.find(x => String(x.nip) === String(nip));
-            if(!p) return;
-
-            Swal.fire({
-                title: 'Edit Data ASN',
-                html: `
-                    <div class="flex flex-col gap-3 mt-4 text-left">
-                        <label class="text-xs font-semibold text-slate-600">NIP (Ubah ke 01 dst jika terpotong)</label>
-                        <input id="swal-peg-nip" class="w-full p-2 border rounded" value="${p.nip}">
-                        
-                        <label class="text-xs font-semibold text-slate-600">Nama Pegawai</label>
-                        <input id="swal-peg-nama" class="w-full p-2 border rounded" value="${p.nama}">
-                        
-                        <label class="text-xs font-semibold text-slate-600">Sekolah</label>
-                        <input id="swal-peg-sekolah" class="w-full p-2 border rounded" value="${p.sekolah}">
-                    </div>
-                `,
-                showCancelButton: true,
-                confirmButtonText: 'Simpan',
-                confirmButtonColor: '#3b82f6',
-                preConfirm: () => {
-                    return {
-                        nip: document.getElementById('swal-peg-nip').value,
-                        nama: document.getElementById('swal-peg-nama').value,
-                        sekolah: document.getElementById('swal-peg-sekolah').value
-                    };
-                }
-            }).then((result) => {
-                if (result.isConfirmed && result.value.nip) {
-                    p.nip = result.value.nip;
-                    p.nama = result.value.nama;
-                    p.sekolah = result.value.sekolah;
-
-                    // Simpan kembali ke Spreadsheet
-                    if (typeof google !== 'undefined' && google.script && google.script.run) {
-                        google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
-                    }
-                    renderDataPegawai(document.getElementById('content-area'));
-                    Swal.fire('Berhasil', 'Data ASN diperbarui', 'success');
-                }
-            });
-        }
-        
-        function prosesUploadPegawaiCSV(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    if (!results.data || results.data.length === 0) {
-                        Swal.fire('Error', 'File CSV kosong atau format tidak sesuai.', 'error');
-                        return;
-                    }
-
-                    let ditolakNIP = [];
-                    let diterimaCount = 0;
-
-                    results.data.forEach(row => {
-                        let nip = String(row['nip'] || row['NIP'] || '').trim();
-                        let nama = String(row['name'] || row['nama'] || row['Nama'] || row['Nama Pegawai'] || '').trim();
-                        let sekolah = String(row['school_name'] || row['sekolah'] || row['Sekolah'] || '').trim();
-                        let photoUploaded = row['photo_uploaded'] || 'False';
-
-                        if (!nip || nip === '-' || !nama) return;
-
-                        let exists = dummyPegawai.some(p => String(p.nip).trim() === nip);
-
-                        if (exists) {
-                            ditolakNIP.push({ nip: nip, nama: nama });
-                        } else {
-                            dummyPegawai.push({
-                                id: Date.now() + Math.random(),
-                                nip: nip,
-                                nama: nama,
-                                sekolah: sekolah,
-                                photo_uploaded: photoUploaded
-                            });
-                            diterimaCount++;
-                        }
-                    });
-
-                    if (ditolakNIP.length > 0) {
-                        let contohNip = ditolakNIP.slice(0, 5).map(x => `${x.nip} (${x.nama})`).join('<br>');
-                        let sisaDitolak = ditolakNIP.length > 5 ? `<br><i>...dan ${ditolakNIP.length - 5} data lainnya.</i>` : '';
-
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Peringatan NIP Ganda!',
-                            html: `<div class="text-left text-xs text-slate-700">
-                                <p class="font-bold text-emerald-600 mb-1">✔ ${diterimaCount} Pegawai baru berhasil ditambahkan.</p>
-                                <p class="font-bold text-red-600 mb-2">✖ ${ditolakNIP.length} Pegawai tertolak karena NIP sudah terdaftar:</p>
-                                <div class="bg-slate-100 p-2 rounded border border-slate-300 font-mono text-[11px] max-h-36 overflow-y-auto">${contohNip}${sisaDitolak}</div>
-                            </div>`,
-                            confirmButtonColor: '#3b82f6'
-                        });
-                    } else {
-                        Swal.fire('Berhasil!', `${diterimaCount} Data Pegawai ASN berhasil diimpor.`, 'success');
-                    }
-
-                    if (typeof google !== 'undefined' && google.script && google.script.run) {
-                        google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
-                    }
-
-                    renderDataPegawai(document.getElementById('content-area'));
-                },
-                error: function(err) {
-                    Swal.fire('Error', 'Gagal memproses file CSV Pegawai.', 'error');
-                }
-            });
-
-            event.target.value = '';
-        }
-
-        // --- FUNGSI MENGAMBIL DATA (DARI ARSIP ATAU HITUNG MANUAL) ---
         function getDashboardData(bulan, tahun, forceCalculate = false) {
-            // 1. Cek dari database arsip yang disimpan! (Jika tidak forceCalculate)
+            let now = new Date();
+            let currentYear = now.getFullYear();
+            let currentMonth = now.getMonth() + 1;
+            let todayDate = now.getDate();
+
+            let isCurrentMonth = (bulan === currentMonth && tahun === currentYear);
+
             if (!forceCalculate) {
                 let arsipMatch = dummyArsip.find(a => parseInt(a.bulan) === bulan && parseInt(a.tahun) === tahun);
                 if (arsipMatch && arsipMatch.snapshot) {
-                    console.log("Memuat data dashboard dari Arsip untuk", bulan, tahun);
-                    return JSON.parse(arsipMatch.snapshot);
+                    try {
+                        let parsed = JSON.parse(arsipMatch.snapshot);
+                        if (parsed && parsed.totalPegawai > 0 && parsed.totalSekolah >= (dummySekolah.length || 1)) {
+                            return parsed;
+                        }
+                    } catch(e) {}
                 }
             }
 
-            // 2. Jika Arsip belum ada atau forceCalculate (Kalkulasi dari data log/absen aktif)
-            let hkOtomatis = hitungHariKerjaBulanIni(tahun, bulan);
-            let absensiDashboard = JSON.parse(JSON.stringify(dummyAbsensi));
-            
-            absensiDashboard.forEach(p => {
+            let maxDayLimit = isCurrentMonth ? todayDate : null;
+            let hkOtomatis = hitungHariKerjaBulanIni(tahun, bulan, maxDayLimit);
+
+            let absensiDashboard = [];
+            let listPegawaiBaseline = dummyPegawai.length > 0 ? dummyPegawai : dummyAbsensi;
+
+            listPegawaiBaseline.forEach(p => {
                 let pNipClean = String(p.nip || '').replace(/['\s]/g, '');
+                
                 let logsBulanIni = dummyLogHarian.filter(l => {
                     let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
                     let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
@@ -476,36 +271,79 @@
                 });
 
                 let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
-                logsBulanIni.forEach(log => {
-                    totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
-                    totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
-                });
 
-                p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat; p.izinSakit = totIzin; p.hariKerja = hkOtomatis;
-                let tk = hkOtomatis - (totHadir + totIzin); p.tanpaKet = tk < 0 ? 0 : tk;
+                if (logsBulanIni.length > 0) {
+                    logsBulanIni.forEach(log => {
+                        totHadir += (parseInt(log.hadir) || 0);
+                        totTelat += (parseInt(log.terlambatMin) || 0);
+                        totCepat += (parseInt(log.cepatPulangMin) || 0);
+                        totIzin += (parseInt(log.izinSakit) || 0);
+                    });
+                } else {
+                    let matchAbsen = dummyAbsensi.find(a => String(a.nip || '').replace(/['\s]/g, '') === pNipClean);
+                    if (matchAbsen) {
+                        totHadir = parseInt(matchAbsen.hadir) || 0;
+                        totTelat = parseInt(matchAbsen.terlambatMin) || 0;
+                        totCepat = parseInt(matchAbsen.cepatPulangMin) || 0;
+                        totIzin = parseInt(matchAbsen.izinSakit) || 0;
+                    }
+                }
+
+                let tk = hkOtomatis - (totHadir + totIzin);
+                if (tk < 0) tk = 0;
+
+                let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((p.sekolah || '').toUpperCase()));
+                let idSekolahVal = matchSekolah ? matchSekolah.id : (p.sekolahId || "ALL");
+
+                absensiDashboard.push({
+                    nip: p.nip,
+                    nama: p.nama,
+                    sekolah: p.sekolah || (matchSekolah ? matchSekolah.nama : '-'),
+                    sekolahId: idSekolahVal,
+                    hadir: totHadir,
+                    terlambatMin: totTelat,
+                    cepatPulangMin: totCepat,
+                    izinSakit: totIzin,
+                    hariKerja: hkOtomatis,
+                    tanpaKet: tk
+                });
             });
 
-            let totalPegawai = dummyPegawai.length > 0 ? dummyPegawai.length : (absensiDashboard.length || 0);
-            let totalSekolah = dummySekolah.length || 0;
+            let totalPegawai = dummyPegawai.length > 0 ? dummyPegawai.length : absensiDashboard.length;
+            let totalSekolah = dummySekolah.length;
             let totTerlambatMin = 0, totCepatPulangMin = 0, totIzinSakit = 0, totTanpaKet = 0;
-            
-            let schoolStats = dummySekolah.map(s => {
-                let pegSekolah = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(s.nama.toUpperCase()));
-                let totalASN = pegSekolah.length;
-                if (totalASN === 0) totalASN = absensiDashboard.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase())).length;
 
-                return { id: s.id, nama: s.nama, totalASN: totalASN, terlambatMin: 0, cepatPulangMin: 0, tanpaKet: 0, hadir: 0, avgTerlambatMin: 0, avgCepatPulangMin: 0, avgTanpaKet: 0 };
+            let schoolStats = dummySekolah.map(s => {
+                let pegSekolah = absensiDashboard.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase()));
+                let totalASN = pegSekolah.length;
+
+                let sumTelat = 0, sumCepat = 0, sumTanpaKet = 0, sumHadir = 0;
+                pegSekolah.forEach(a => {
+                    sumTelat += a.terlambatMin;
+                    sumCepat += a.cepatPulangMin;
+                    sumTanpaKet += a.tanpaKet;
+                    sumHadir += a.hadir;
+                });
+
+                return {
+                    id: s.id,
+                    nama: s.nama,
+                    totalASN: totalASN,
+                    terlambatMin: sumTelat,
+                    cepatPulangMin: sumCepat,
+                    tanpaKet: sumTanpaKet,
+                    hadir: sumHadir,
+                    avgTerlambatMin: 0,
+                    avgCepatPulangMin: 0,
+                    avgTanpaKet: 0
+                };
             });
 
             absensiDashboard.forEach(absen => {
-                totTerlambatMin += parseInt(absen.terlambatMin) || 0; totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
-                totIzinSakit += parseInt(absen.izinSakit) || 0; totTanpaKet += parseInt(absen.tanpaKet) || 0;
-
-                let s = schoolStats.find(x => String(x.id) === String(absen.sekolahId) || x.nama.toUpperCase().includes((absen.sekolah || '').toUpperCase()));
-                if(s) {
-                    s.terlambatMin += parseInt(absen.terlambatMin) || 0; s.cepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
-                    s.tanpaKet += parseInt(absen.tanpaKet) || 0; s.hadir += parseInt(absen.hadir) || 0;
-                }
+                totTerlambatMin += parseInt(absen.terlambatMin) || 0;
+                totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
+                totIzinSakit += parseInt(absen.izinSakit) || 0;
+                totTanpaKet += parseInt(absen.tanpaKet) || 0;
             });
 
             schoolStats.forEach(s => {
@@ -513,7 +351,9 @@
                     s.avgTanpaKet = parseFloat((s.tanpaKet / s.totalASN).toFixed(1));
                     s.avgTerlambatMin = Math.round(s.terlambatMin / s.totalASN);
                     s.avgCepatPulangMin = Math.round(s.cepatPulangMin / s.totalASN);
-                } else { s.avgTanpaKet = 0; s.avgTerlambatMin = 0; s.avgCepatPulangMin = 0; }
+                } else {
+                    s.avgTanpaKet = 0; s.avgTerlambatMin = 0; s.avgCepatPulangMin = 0;
+                }
             });
 
             let activeSchools = schoolStats.filter(s => s.totalASN > 0);
@@ -545,7 +385,6 @@
             return { totalPegawai, totalSekolah, totTerlambatMin, totCepatPulangMin, totIzinSakit, totTanpaKet, top5ASN, top5AlpaSekolah, top5TerlambatSekolah, top5CepatPulangSekolah, best5AlpaSekolah, best5TerlambatSekolah, best5CepatPulangSekolah, schoolStats };
         }
 
-        // --- RENDER DASHBOARD MENGGUNAKAN SNAPSHOT / DATA AKTIF ---
         function renderDashboard(container) {
             if(!container) return;
 
@@ -568,7 +407,6 @@
             let tahunList = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
             let optionTahun = tahunList.map(t => `<option value="${t}" ${t === currentTahun ? 'selected' : ''}>${t}</option>`).join('');
 
-            // AMBIL DATA DARI FUNGSI (BISA DARI ARSIP ATAU HITUNG MANUAL)
             let dash = getDashboardData(currentBulan, currentTahun);
             const labelPeriode = `${namaBulanArr[currentBulan - 1]} ${currentTahun}`;
 
@@ -727,172 +565,219 @@
         }
 
         function tampilkanKartuASN(asnJsonEncoded) {
-    let asn = JSON.parse(decodeURIComponent(asnJsonEncoded));
+            let asn = JSON.parse(decodeURIComponent(asnJsonEncoded));
 
-    const now = new Date();
-    const bulanNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-    const currentBulan = bulanNames[now.getMonth()];
-    const currentTahun = now.getFullYear();
-    const periodeTeks = `${currentBulan} ${currentTahun}`;
-    const lastDayObj = new Date(currentTahun, now.getMonth() + 1, 0);
-    const lastDayDate = lastDayObj.getDate();
-    const ttdTanggal = `Wajo, ${lastDayDate} ${currentBulan} ${currentTahun}`;
+            const now = new Date();
+            const bulanNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            const currentBulan = bulanNames[now.getMonth()];
+            const currentTahun = now.getFullYear();
+            const periodeTeks = `${currentBulan} ${currentTahun}`;
+            const lastDayObj = new Date(currentTahun, now.getMonth() + 1, 0);
+            const lastDayDate = lastDayObj.getDate();
+            const ttdTanggal = `Wajo, ${lastDayDate} ${currentBulan} ${currentTahun}`;
 
-    const logoSulsel = "https://i.imgur.com/N8da60H.png";
+            const logoSulsel = "https://i.imgur.com/N8da60H.png";
 
-    Swal.fire({
-        html: `
-            <div id="kartuSertifikatASN" style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); padding: 32px; border-radius: 24px; color: white; position: relative; overflow: hidden; border: 2px solid #fbbf24; width: 800px; max-width: 100%; margin: 0 auto; text-align: left; font-family: Arial, sans-serif; box-sizing: border-box;">
-        
-                  <div style="position: absolute; top: -80px; right: -80px; width: 240px; height: 240px; background: rgba(245, 158, 11, 0.1); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
-                  <div style="position: absolute; bottom: -80px; left: -80px; width: 240px; height: 240px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
+            Swal.fire({
+                html: `
+                    <div id="kartuSertifikatASN" style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); padding: 32px; border-radius: 24px; color: white; position: relative; overflow: hidden; border: 2px solid #fbbf24; width: 800px; max-width: 100%; margin: 0 auto; text-align: left; font-family: Arial, sans-serif; box-sizing: border-box;">
+                
+                          <div style="position: absolute; top: -80px; right: -80px; width: 240px; height: 240px; background: rgba(245, 158, 11, 0.1); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
+                          <div style="position: absolute; bottom: -80px; left: -80px; width: 240px; height: 240px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
 
-                  <!-- Header Sertifikat -->
-                  <table style="width: 100%; margin-bottom: 20px; border-bottom: 1px solid rgba(251, 191, 36, 0.3); padding-bottom: 15px; position: relative; z-index: 10;">
-                      <tr>
-                          <td style="width: 60px; padding-right: 15px;">
-                              <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.1); border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.4); text-align: center; line-height: 56px;">
-                                  <img src="${logoSulsel}" alt="Logo Sulsel" crossorigin="anonymous" style="max-height: 44px; display: inline-block; vertical-align: middle;" />
-                              </div>
-                          </td>
-                          <td>
-                              <h4 style="color: #fbbf24; font-weight: 900; font-size: 16px; text-transform: uppercase; margin: 0;">CABANG DINAS PENDIDIKAN WIL. IV</h4>
-                              <p style="color: #cbd5e1; font-weight: 500; font-size: 12px; margin: 4px 0 0 0;">Absensi Satuan Pendidikan Cabang Dinas Pendidikan Wil. IV</p>
-                          </td>
-                      </tr>
-                  </table>
+                          <table style="width: 100%; margin-bottom: 20px; border-bottom: 1px solid rgba(251, 191, 36, 0.3); padding-bottom: 15px; position: relative; z-index: 10;">
+                              <tr>
+                                  <td style="width: 60px; padding-right: 15px;">
+                                      <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.1); border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.4); text-align: center; line-height: 56px;">
+                                          <img src="${logoSulsel}" alt="Logo Sulsel" crossorigin="anonymous" style="max-height: 44px; display: inline-block; vertical-align: middle;" />
+                                      </div>
+                                  </td>
+                                  <td>
+                                      <h4 style="color: #fbbf24; font-weight: 900; font-size: 16px; text-transform: uppercase; margin: 0;">CABANG DINAS PENDIDIKAN WIL. IV</h4>
+                                      <p style="color: #cbd5e1; font-weight: 500; font-size: 12px; margin: 4px 0 0 0;">Absensi Satuan Pendidikan Cabang Dinas Pendidikan Wil. IV</p>
+                                  </td>
+                              </tr>
+                          </table>
 
-                  <!-- Badge ASN Teladan & Periode -->
-                  <div style="text-align: center; margin: 10px 0; position: relative; z-index: 10;">
-                      <span style="display: inline-block; background: linear-gradient(to right, #f59e0b, #facc15, #f59e0b); color: #020617; font-weight: 900; font-size: 12px; text-transform: uppercase; padding: 6px 20px; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #fcd34d;">
-                          &#9733; ASN TELADAN PRESENSI
-                      </span>
-                      <p style="color: #fde047; font-weight: 600; font-size: 12px; margin: 10px 0 0 0;">Periode Penilaian: ${periodeTeks}</p>
-                  </div>
-
-                  <!-- Informasi Pemilik -->
-                  <div style="text-align: center; margin: 20px 0; position: relative; z-index: 10;">
-                      <h3 style="font-size: 24px; font-weight: 900; color: #ffffff; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">${asn.nama || 'ASN'}</h3>
-                      <p style="font-size: 14px; color: #fde047; font-family: monospace; margin: 5px 0;">NIP: ${asn.nip}</p>
-                      <div style="margin-top: 10px;">
-                      <span style="display: inline-block; font-size: 12px; color: #e2e8f0; font-weight: 600; background: rgba(30, 58, 138, 0.6); padding: 6px 16px; border-radius: 12px; border: 1px solid rgba(29, 78, 216, 0.5);">
-                          &#127979; ${asn.sekolah || 'Instansi'}
-                      </span>
-                  </div>
-              </div>
-
-              <!-- Grid Kehadiran -->
-              <table style="width: 70%; margin: 20px auto; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 16px; position: relative; z-index: 10; text-align: center; border-collapse: collapse;">
-                  <tr>
-                      <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
-                          <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Kehadiran</p>
-                          <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.hadir || 0} Hari</p>
-                      </td>
-                      <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
-                          <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Terlambat</p>
-                          <p style="font-weight: 900; color: #fbbf24; font-size: 16px; margin: 5px 0 0 0;">${asn.terlambatMin || 0} Mnt</p>
-                      </td>
-                      <td style="padding: 15px; width: 33%;">
-                          <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Tanpa Ket.</p>
-                          <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.tanpaKet || 0} Hari</p>
-                      </td>
-                  </tr>
-              </table>
-
-              <!-- Tanda Tangan & Footer -->
-              <table style="width: 100%; margin-top: 25px; border-top: 1px solid #1e293b; padding-top: 15px; position: relative; z-index: 10;">
-                  <tr>
-                      <td style="vertical-align: bottom; width: 50%;">
-                          <p style="color: #fbbf24; font-weight: 700; font-size: 12px; margin: 0;">Cabdin Wilayah IV Wajo-Sidrap</p>
-                          <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Sistem Presensi &amp; Indisipliner Terpadu</p>
-                      </td>
-                      <td style="text-align: right; vertical-align: bottom; width: 50%;">
-                          <p style="color: #cbd5e1; font-size: 12px; font-weight: 600; margin: 0 0 2px 0;">${ttdTanggal}</p>
-                          <p style="color: #ffffff; font-size: 12px; font-weight: 700; margin: 0 0 10px 0;">Kepala Cabang Dinas Pendidikan Wil. IV</p>
-                    
-                          <div style="display: inline-block; background: #ffffff; border-radius: 12px; padding: 8px; border: 1px solid #cbd5e1; text-align: left; margin-bottom: 10px;">
-                              <table style="border-collapse: collapse;">
-                                  <tr>
-                                      <td style="padding-right: 8px;">
-                                          <img src="${logoSulsel}" crossorigin="anonymous" style="height: 32px; display: block;" />
-                                      </td>
-                                      <td>
-                                          <p style="font-size: 9px; color: #1e3a8a; font-weight: 900; margin: 0; line-height: 1.2;">Pemerintah Provinsi</p>
-                                          <p style="font-size: 10px; color: #0f172a; font-weight: 900; margin: 0; line-height: 1.2;">Sulawesi Selatan</p>
-                                          <p style="font-size: 7px; color: #64748b; margin: 2px 0 0 0;">Dokumen ini ditandatangani secara digital</p>
-                                      </td>
-                                  </tr>
-                              </table>
+                          <div style="text-align: center; margin: 10px 0; position: relative; z-index: 10;">
+                              <span style="display: inline-block; background: linear-gradient(to right, #f59e0b, #facc15, #f59e0b); color: #020617; font-weight: 900; font-size: 12px; text-transform: uppercase; padding: 6px 20px; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #fcd34d;">
+                                  &#9733; ASN TELADAN PRESENSI
+                              </span>
+                              <p style="color: #fde047; font-weight: 600; font-size: 12px; margin: 10px 0 0 0;">Periode Penilaian: ${periodeTeks}</p>
                           </div>
 
-                          <p style="color: #fde047; font-size: 12px; font-weight: 900; margin: 0;">DR. H. SETTARAMING, S.Pd., M.Si</p>
-                          <p style="color: #cbd5e1; font-size: 11px; font-family: monospace; margin: 2px 0 0 0;">NIP. 197204031998011001</p>
-                      </td>
-                  </tr>
-              </table>
-          </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: '<i class="fa-solid fa-print mr-1"></i> Cetak / Simpan PDF',
-      cancelButtonText: 'Tutup',
-      confirmButtonColor: '#f59e0b',
-      width: '860px',
-      customClass: { popup: 'p-2 rounded-3xl bg-transparent shadow-none' }
-  }).then((result) => {
-      if (result.isConfirmed) {
-          // MENGGUNAKAN METODE PRINT BAWAAN BROWSER
-          let printContent = document.getElementById('kartuSertifikatASN').outerHTML;
-          
-          // Membuat iframe tersembunyi agar print tidak mengganggu halaman utama
-          let iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-          
-          iframe.contentWindow.document.open();
-          iframe.contentWindow.document.write(`
-              <html>
-              <head>
-                  <title>Sertifikat Presensi - ${asn.nama}</title>
-                  <style>
-                      @media print {
-                          @page { 
-                              size: A4 landscape; 
-                              margin: 0; 
-                          }
-                          body { 
-                              -webkit-print-color-adjust: exact !important; 
-                              print-color-adjust: exact !important; 
-                              margin: auto; 
-                              display: flex; 
-                              justify-content: center; 
-                              align-items: center; 
-                              min-height: 150vh;
-                              background-color: #0f172a; /* Warna background untuk menutupi sisa kertas putih */
-                          }
-                          #kartuSertifikatASN {
-                              transform: scale(1.1); /* Sedikit diperbesar agar pas di kertas */
-                              margin: auto;
-                          }
-                      }
-                  </style>
-              </head>
-              <body>
-                  ${printContent}
-              </body>
-              </html>
-          `);
-          iframe.contentWindow.document.close();
-          
-          // Memberi waktu 1 detik agar logo tereksekusi sebelum diprint
-          setTimeout(() => {
-              iframe.contentWindow.focus();
-              iframe.contentWindow.print();
-              // Hapus iframe setelah dialog print ditutup
-              setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-          }, 1000);
-      }
-  });
-}
+                          <div style="text-align: center; margin: 20px 0; position: relative; z-index: 10;">
+                              <h3 style="font-size: 24px; font-weight: 900; color: #ffffff; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">${asn.nama || 'ASN'}</h3>
+                              <p style="font-size: 14px; color: #fde047; font-family: monospace; margin: 5px 0;">NIP: ${asn.nip}</p>
+                              <div style="margin-top: 10px;">
+                              <span style="display: inline-block; font-size: 12px; color: #e2e8f0; font-weight: 600; background: rgba(30, 58, 138, 0.6); padding: 6px 16px; border-radius: 12px; border: 1px solid rgba(29, 78, 216, 0.5);">
+                                  &#127979; ${asn.sekolah || 'Instansi'}
+                              </span>
+                          </div>
+                      </div>
+
+                      <table style="width: 70%; margin: 20px auto; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 16px; position: relative; z-index: 10; text-align: center; border-collapse: collapse;">
+                          <tr>
+                              <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
+                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Kehadiran</p>
+                                  <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.hadir || 0} Hari</p>
+                              </td>
+                              <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
+                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Terlambat</p>
+                                  <p style="font-weight: 900; color: #fbbf24; font-size: 16px; margin: 5px 0 0 0;">${asn.terlambatMin || 0} Mnt</p>
+                              </td>
+                              <td style="padding: 15px; width: 33%;">
+                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Tanpa Ket.</p>
+                                  <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.tanpaKet || 0} Hari</p>
+                              </td>
+                          </tr>
+                      </table>
+
+                      <table style="width: 100%; margin-top: 25px; border-top: 1px solid #1e293b; padding-top: 15px; position: relative; z-index: 10;">
+                          <tr>
+                              <td style="vertical-align: bottom; width: 50%;">
+                                  <p style="color: #fbbf24; font-weight: 700; font-size: 12px; margin: 0;">Cabdin Wilayah IV Wajo-Sidrap</p>
+                                  <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Sistem Presensi &amp; Indisipliner Terpadu</p>
+                              </td>
+                              <td style="text-align: right; vertical-align: bottom; width: 50%;">
+                                  <p style="color: #cbd5e1; font-size: 12px; font-weight: 600; margin: 0 0 2px 0;">${ttdTanggal}</p>
+                                  <p style="color: #ffffff; font-size: 12px; font-weight: 700; margin: 0 0 10px 0;">Kepala Cabang Dinas Pendidikan Wil. IV</p>
+                            
+                                  <div style="display: inline-block; background: #ffffff; border-radius: 12px; padding: 8px; border: 1px solid #cbd5e1; text-align: left; margin-bottom: 10px;">
+                                      <table style="border-collapse: collapse;">
+                                          <tr>
+                                              <td style="padding-right: 8px;">
+                                                  <img src="${logoSulsel}" crossorigin="anonymous" style="height: 32px; display: block;" />
+                                              </td>
+                                              <td>
+                                                  <p style="font-size: 9px; color: #1e3a8a; font-weight: 900; margin: 0; line-height: 1.2;">Pemerintah Provinsi</p>
+                                                  <p style="font-size: 10px; color: #0f172a; font-weight: 900; margin: 0; line-height: 1.2;">Sulawesi Selatan</p>
+                                                  <p style="font-size: 7px; color: #64748b; margin: 2px 0 0 0;">Dokumen ini ditandatangani secara digital</p>
+                                              </td>
+                                          </tr>
+                                      </table>
+                                  </div>
+
+                                  <p style="color: #fde047; font-size: 12px; font-weight: 900; margin: 0;">DR. H. SETTARAMING, S.Pd., M.Si</p>
+                                  <p style="color: #cbd5e1; font-size: 11px; font-family: monospace; margin: 2px 0 0 0;">NIP. 197204031998011001</p>
+                              </td>
+                          </tr>
+                      </table>
+                  </div>
+              `,
+              showCancelButton: true,
+              confirmButtonText: '<i class="fa-solid fa-print mr-1"></i> Cetak / Simpan PDF',
+              cancelButtonText: 'Tutup',
+              confirmButtonColor: '#f59e0b',
+              width: '860px',
+              customClass: { popup: 'p-2 rounded-3xl bg-transparent shadow-none' }
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  let printContent = document.getElementById('kartuSertifikatASN').outerHTML;
+                  let iframe = document.createElement('iframe');
+                  iframe.style.display = 'none';
+                  document.body.appendChild(iframe);
+                  
+                  iframe.contentWindow.document.open();
+                  iframe.contentWindow.document.write(`
+                      <html>
+                      <head>
+                          <title>Sertifikat Presensi - ${asn.nama}</title>
+                          <style>
+                              @media print {
+                                  @page { size: A4 landscape; margin: 0; }
+                                  body { 
+                                      -webkit-print-color-adjust: exact !important; 
+                                      print-color-adjust: exact !important; 
+                                      margin: auto; display: flex; justify-content: center; align-items: center; 
+                                      min-height: 150vh; background-color: #0f172a; 
+                                  }
+                                  #kartuSertifikatASN { transform: scale(1.1); margin: auto; }
+                              }
+                          </style>
+                      </head>
+                      <body>${printContent}</body>
+                      </html>
+                  `);
+                  iframe.contentWindow.document.close();
+                  
+                  setTimeout(() => {
+                      iframe.contentWindow.focus();
+                      iframe.contentWindow.print();
+                      setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+                  }, 1000);
+              }
+          });
+        }
+
+        function renderDataSekolah(container) {
+            if(!container) return;
+
+            container.innerHTML = `
+                <div class="glass-card p-6">
+                    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-lg">Master Data Sekolah</h3>
+                            <p class="text-xs text-slate-500">Daftar Satuan Pendidikan di bawah Naungan Cabdin Wil. IV</p>
+                        </div>
+                        <div class="flex gap-2 flex-wrap items-center">
+                            <button onclick="downloadTemplateSekolah()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-download"></i> Template Sekolah
+                            </button>
+                            <input type="file" id="uploadExcelSekolah" accept=".xlsx, .xls, .csv" class="hidden" onchange="prosesUploadSekolah(event)" />
+                            <button onclick="document.getElementById('uploadExcelSekolah').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-file-excel"></i> Unggah Excel/CSV Sekolah
+                            </button>
+                            <button onclick="tambahSekolahBaru()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-plus"></i> Tambah Sekolah
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-bold">
+                                    <th class="p-3 text-center w-12 border-b">No</th>
+                                    <th class="p-3 border-b">Nama Sekolah</th>
+                                    <th class="p-3 border-b">NPSN</th>
+                                    <th class="p-3 border-b">Kepala Sekolah</th>
+                                    <th class="p-3 border-b">NIP Kepsek</th>
+                                    <th class="p-3 text-center border-b w-32">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bodySekolah"></tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            renderTabelSekolah();
+        }
+
+        function renderTabelSekolah() {
+            const tbody = document.getElementById('bodySekolah');
+            if(!tbody) return;
+
+            if(!dummySekolah || dummySekolah.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 text-sm">Belum ada data sekolah. Silakan unggah file Data Sekolah.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = dummySekolah.map((s, i) => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
+                    <td class="p-3 text-center text-slate-500">${i+1}</td>
+                    <td class="p-3 font-semibold text-slate-800">${s.nama}</td>
+                    <td class="p-3 text-slate-600 font-mono text-xs">${s.npsn || '-'}</td>
+                    <td class="p-3 text-slate-700">${s.kepsek || '-'}</td>
+                    <td class="p-3 text-slate-500 font-mono text-xs">${s.nip || '-'}</td>
+                    <td class="p-3 text-center flex justify-center gap-1">
+                        <button onclick="editSekolah('${s.id}')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs"><i class="fa-solid fa-pen"></i> Edit</button>
+                        <button onclick="hapusSekolah('${s.id}')" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs"><i class="fa-solid fa-trash"></i> Hapus</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
         function hapusSekolah(id) {
             Swal.fire({
                 title: 'Hapus Sekolah?',
@@ -1026,6 +911,208 @@
             event.target.value = '';
         }
 
+        function renderDataPegawai(container) {
+            if(!container) return;
+            
+            let wajoSchoolPeg = dummySekolah.find(s => s.nama.toUpperCase().includes('SMAN 1 WAJO'));
+            let wajoNamaPeg = wajoSchoolPeg ? wajoSchoolPeg.nama : "SMAN 1 WAJO";
+
+            let sekolahOptions = `<option value="ALL">Semua Sekolah</option>` + 
+                dummySekolah.map(s => `<option value="${s.nama}" ${s.nama === wajoNamaPeg ? 'selected' : ''}>${s.nama}</option>`).join('');
+            
+            if (!wajoSchoolPeg) {
+                sekolahOptions = `<option value="SMAN 1 WAJO" selected>SMAN 1 WAJO</option>` + sekolahOptions;
+            }
+
+            container.innerHTML = `
+                <div class="glass-card p-6">
+                    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-lg">Master Data Pegawai ASN</h3>
+                            <p class="text-xs text-slate-500">Basis data acuan pegawai untuk presensi seluruh sekolah Cabdin Wil. IV</p>
+                        </div>
+                        <div class="flex gap-2 flex-wrap items-center">
+                            <select id="filterSekolahPegawai" onchange="renderTabelPegawai()" class="p-2 border border-slate-300 rounded text-sm min-w-[200px]">
+                                ${sekolahOptions}
+                            </select>
+                            <input type="file" id="uploadCSVPegawai" accept=".csv" class="hidden" onchange="prosesUploadPegawaiCSV(event)" />
+                            <button onclick="downloadTemplatePegawai()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-download"></i> Template
+                            </button>
+                            <button onclick="document.getElementById('uploadCSVPegawai').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                                <i class="fa-solid fa-file-csv"></i> Unggah CSV Pegawai
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-bold">
+                                    <th class="p-3 text-center w-12 border-b">No</th>
+                                    <th class="p-3 border-b">NIP</th>
+                                    <th class="p-3 border-b">Nama Pegawai</th>
+                                    <th class="p-3 border-b">Sekolah</th>
+                                    <th class="p-3 text-center border-b">Foto Acuan</th>
+                                    <th class="p-3 text-center border-b w-24">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bodyPegawai"></tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            renderTabelPegawai();
+        }
+
+        function renderTabelPegawai() {
+            const filterVal = document.getElementById('filterSekolahPegawai') ? document.getElementById('filterSekolahPegawai').value : "ALL";
+            const tbody = document.getElementById('bodyPegawai');
+            if(!tbody) return;
+
+            let filtered = dummyPegawai;
+            if (filterVal !== "ALL") {
+                filtered = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(filterVal.toUpperCase()));
+            }
+
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 text-sm">Belum ada data pegawai. Silakan unggah CSV Data Pegawai.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((p, i) => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
+                    <td class="p-3 text-center text-slate-500">${i+1}</td>
+                    <td class="p-3 font-semibold text-slate-800">${p.nip}</td>
+                    <td class="p-3 font-semibold text-blue-950">${p.nama}</td>
+                    <td class="p-3 text-slate-600">${p.sekolah || '-'}</td>
+                    <td class="p-3 text-center">
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+                            ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'Tersedia' : 'Belum Ada'}
+                        </span>
+                    </td>
+                    <td class="p-3 text-center">
+                        <button onclick="editPegawai('${p.nip}')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs"><i class="fa-solid fa-pen"></i> Edit</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function editPegawai(nip) {
+            let p = dummyPegawai.find(x => String(x.nip) === String(nip));
+            if(!p) return;
+
+            Swal.fire({
+                title: 'Edit Data ASN',
+                html: `
+                    <div class="flex flex-col gap-3 mt-4 text-left">
+                        <label class="text-xs font-semibold text-slate-600">NIP</label>
+                        <input id="swal-peg-nip" class="w-full p-2 border rounded" value="${p.nip}">
+                        
+                        <label class="text-xs font-semibold text-slate-600">Nama Pegawai</label>
+                        <input id="swal-peg-nama" class="w-full p-2 border rounded" value="${p.nama}">
+                        
+                        <label class="text-xs font-semibold text-slate-600">Sekolah</label>
+                        <input id="swal-peg-sekolah" class="w-full p-2 border rounded" value="${p.sekolah}">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Simpan',
+                confirmButtonColor: '#3b82f6',
+                preConfirm: () => {
+                    return {
+                        nip: document.getElementById('swal-peg-nip').value,
+                        nama: document.getElementById('swal-peg-nama').value,
+                        sekolah: document.getElementById('swal-peg-sekolah').value
+                    };
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value.nip) {
+                    p.nip = result.value.nip;
+                    p.nama = result.value.nama;
+                    p.sekolah = result.value.sekolah;
+
+                    if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+                    }
+                    renderDataPegawai(document.getElementById('content-area'));
+                    Swal.fire('Berhasil', 'Data ASN diperbarui', 'success');
+                }
+            });
+        }
+
+        function prosesUploadPegawaiCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (!results.data || results.data.length === 0) {
+                        Swal.fire('Error', 'File CSV kosong atau format tidak sesuai.', 'error');
+                        return;
+                    }
+
+                    let ditolakNIP = [];
+                    let diterimaCount = 0;
+
+                    results.data.forEach(row => {
+                        let nip = String(row['nip'] || row['NIP'] || '').trim();
+                        let nama = String(row['name'] || row['nama'] || row['Nama'] || row['Nama Pegawai'] || '').trim();
+                        let sekolah = String(row['school_name'] || row['sekolah'] || row['Sekolah'] || '').trim();
+                        let photoUploaded = row['photo_uploaded'] || 'False';
+
+                        if (!nip || nip === '-' || !nama) return;
+
+                        let exists = dummyPegawai.some(p => String(p.nip).trim() === nip);
+
+                        if (exists) {
+                            ditolakNIP.push({ nip: nip, nama: nama });
+                        } else {
+                            dummyPegawai.push({
+                                id: Date.now() + Math.random(),
+                                nip: nip,
+                                nama: nama,
+                                sekolah: sekolah,
+                                photo_uploaded: photoUploaded
+                            });
+                            diterimaCount++;
+                        }
+                    });
+
+                    if (ditolakNIP.length > 0) {
+                        let contohNip = ditolakNIP.slice(0, 5).map(x => `${x.nip} (${x.nama})`).join('<br>');
+                        let sisaDitolak = ditolakNIP.length > 5 ? `<br><i>...dan ${ditolakNIP.length - 5} data lainnya.</i>` : '';
+
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Peringatan NIP Ganda!',
+                            html: `<div class="text-left text-xs text-slate-700">
+                                <p class="font-bold text-emerald-600 mb-1">✔ ${diterimaCount} Pegawai baru berhasil ditambahkan.</p>
+                                <p class="font-bold text-red-600 mb-2">✖ ${ditolakNIP.length} Pegawai tertolak karena NIP sudah terdaftar:</p>
+                                <div class="bg-slate-100 p-2 rounded border border-slate-300 font-mono text-[11px] max-h-36 overflow-y-auto">${contohNip}${sisaDitolak}</div>
+                            </div>`,
+                            confirmButtonColor: '#3b82f6'
+                        });
+                    } else {
+                        Swal.fire('Berhasil!', `${diterimaCount} Data Pegawai ASN berhasil diimpor.`, 'success');
+                    }
+
+                    if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+                    }
+
+                    renderDataPegawai(document.getElementById('content-area'));
+                },
+                error: function(err) {
+                    Swal.fire('Error', 'Gagal memproses file CSV Pegawai.', 'error');
+                }
+            });
+
+            event.target.value = '';
+        }
+
         function sinkronkanMasterKeAbsensi() {
             let tahunSekarang = new Date().getFullYear();
             let bulanSekarang = new Date().getMonth() + 1; 
@@ -1065,13 +1152,11 @@
             let currentBulan = now.getMonth() + 1;
             let currentTahun = now.getFullYear();
 
-            // --- MODIFIKASI DEFAULT SMAN 1 WAJO ---
             let wajoSchoolAbs = dummySekolah.find(s => s.nama.toUpperCase().includes('SMAN 1 WAJO'));
             let wajoIdAbs = wajoSchoolAbs ? wajoSchoolAbs.id : "ALL";
 
             let optionsSekolah = `<option value="ALL" ${wajoIdAbs === 'ALL' ? 'selected' : ''}>Semua Sekolah</option>` + 
                 dummySekolah.map(s => `<option value="${s.id}" ${s.id == wajoIdAbs ? 'selected' : ''}>${s.nama}</option>`).join('');
-            // --------------------------------------
 
             let optionTanggal = `<option value="ALL">Semua Tanggal (Rekap Bulanan)</option>`;
             for(let d = 1; d <= 31; d++) {
@@ -1305,15 +1390,9 @@
                 let p3 = parseInt(parts[2], 10);
 
                 if (parts[0].length === 4) {
-                    // Format YYYY-MM-DD dari CSV (Contoh 2026-10-09)
-                    yyyy = p1;
-                    mm = p2;
-                    dd = p3;
+                    yyyy = p1; mm = p2; dd = p3;
                 } else {
-                    // Format MM/DD/YY dari Konversi Spreadsheet (Contoh 10/9/26)
-                    mm = p1;
-                    dd = p2;
-                    yyyy = p3 < 100 ? p3 + 2000 : p3;
+                    mm = p1; dd = p2; yyyy = p3 < 100 ? p3 + 2000 : p3;
                 }
             }
             return { yyyy, mm, dd };
@@ -1335,9 +1414,8 @@
 
                         jsonData.forEach(row => {
                             let nipPegawai, namaPegawai, namaSekolah, tanggal, jam, status;
-
-                            // Cek apakah data menyatu dalam satu kolom (mengandung koma)
                             const keys = Object.keys(row);
+
                             if (keys.length === 1 && keys[0].includes(',')) {
                                 const headerArr = keys[0].split(',');
                                 const valueArr = String(row[keys[0]]).split(',');
@@ -1357,7 +1435,6 @@
                                 status = statusIdx !== -1 ? String(valueArr[statusIdx] || '').trim().toUpperCase() : '';
             
                             } else {
-                                // Mode normal jika format kolom sudah terpisah rapi dari awal
                                 nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
                                 namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
                                 namaSekolah = String(row['sekolah'] || row['Sekolah'] || row['SEKOLAH'] || '-').trim();
@@ -1377,73 +1454,47 @@
                                 };
                             }
 
-                            // --- PENAMBAHAN PENGATURAN DOUBLE ABSENSI ---
                             if (status === 'MASUK' || status === 'DATANG') {
                                 if (riwayatHarian[key].datang === null) {
                                     riwayatHarian[key].datang = jam;
                                 } else if (jam < riwayatHarian[key].datang) {
-                                    // Jika ada double Masuk, ambil jam yang paling kecil/awal
                                     riwayatHarian[key].datang = jam;
                                 }
                             } else if (status === 'PULANG') {
                                 if (riwayatHarian[key].pulang === null) {
                                     riwayatHarian[key].pulang = jam;
                                 } else if (jam > riwayatHarian[key].pulang) {
-                                    // Jika ada double Pulang (atau salah pencet Pulang pagi hari), ambil jam yang paling besar/akhir
                                     riwayatHarian[key].pulang = jam;
                                 }
                             } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
                                 riwayatHarian[key].izinSakit = 1;
                             }
-                            // ---------------------------------------------
                         });
 
                         Object.values(riwayatHarian).forEach(record => {
-                            let hadirBaru = 0;
-                            let terlambatBaru = 0;
-                            let cptPulangBaru = 0;
+                            let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
 
                             if (record.izinSakit > 0) {
-                                // ATURAN 3: Cuti, Izin, Sakit, Dinas Luar -> Dianggap Hadir, Telat 0, Cepat Pulang 0
-                                hadirBaru = 0;
-                                terlambatBaru = 0;
-                                cptPulangBaru = 0;
+                                hadirBaru = 0; terlambatBaru = 0; cptPulangBaru = 0;
                             } else if (record.datang !== null || record.pulang !== null) {
                                 hadirBaru = 1;
-                                
-                                // ATURAN 1 & 4: MASUK
                                 if (record.datang !== null) {
                                     let [jamD, mntD] = record.datang.split(':').map(Number);
                                     let totalDatangMnt = (jamD * 60) + mntD;
-                                    let batasMasukMnt = (8 * 60) + 0; // 08:00
-                                    if (totalDatangMnt > batasMasukMnt) {
-                                        terlambatBaru = totalDatangMnt - batasMasukMnt;
-                                    } else {
-                                        terlambatBaru = 0; // Tepat waktu atau sebelum jam 8
-                                    }
-                                } else {
-                                    terlambatBaru = 480; // Denda tidak ada absen masuk
-                                }
+                                    let batasMasukMnt = (8 * 60);
+                                    terlambatBaru = totalDatangMnt > batasMasukMnt ? totalDatangMnt - batasMasukMnt : 0;
+                                } else { terlambatBaru = 480; }
                                 
-                                // ATURAN 2 & 4: PULANG
                                 if (record.pulang !== null) {
                                     let [jamP, mntP] = record.pulang.split(':').map(Number);
                                     let totalPulangMnt = (jamP * 60) + mntP;
-                                    let batasPulangMnt = (16 * 60) + 0; // 16:00
-                                    if (totalPulangMnt < batasPulangMnt) {
-                                        cptPulangBaru = batasPulangMnt - totalPulangMnt;
-                                    } else {
-                                        cptPulangBaru = 0; // Tepat waktu atau setelah jam 16:00
-                                    }
-                                } else {
-                                    cptPulangBaru = 480; // Denda tidak ada absen pulang
-                                }
+                                    let batasPulangMnt = (16 * 60);
+                                    cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
+                                } else { cptPulangBaru = 480; }
                             }
 
                             let tglObj = parseTanggalLog(record.tanggal);
-                            let yyyy = tglObj.yyyy;
-                            let mm = tglObj.mm;
-                            let dd = tglObj.dd;
+                            let yyyy = tglObj.yyyy; let mm = tglObj.mm; let dd = tglObj.dd;
 
                             let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes(record.sekolah.toUpperCase()));
                             let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
@@ -1451,7 +1502,6 @@
 
                             let existingIndex = dummyLogHarian.findIndex(l => l.nip === record.nip && l.tanggalStr === record.tanggal);
 
-                            // 1. Ambil nilai lama sebelum ditimpa (agar kita bisa hitung selisihnya)
                             let oldHadir = 0, oldTerlambat = 0, oldCepatPulang = 0, oldIzinSakit = 0;
                             if (existingIndex !== -1) {
                                 let oldLog = dummyLogHarian[existingIndex];
@@ -1461,28 +1511,18 @@
                                 oldIzinSakit = oldLog.izinSakit || 0;
                             }
 
-                            // 2. Siapkan data log baru
                             let logData = {
-                                nip: record.nip,
-                                nama: record.nama,
-                                sekolah: namaSekolahFinal,
-                                sekolahId: idSekolahVal,
-                                tanggalStr: record.tanggal,
-                                yyyy: yyyy, mm: mm, dd: dd,
-                                hadir: hadirBaru,
-                                terlambatMin: terlambatBaru,
-                                cepatPulangMin: cptPulangBaru,
-                                izinSakit: record.izinSakit
+                                nip: record.nip, nama: record.nama, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
+                                tanggalStr: record.tanggal, yyyy: yyyy, mm: mm, dd: dd,
+                                hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit
                             };
 
-                            // 3. Simpan ke Log Harian (Timpa jika ada, tambah jika baru)
                             if (existingIndex !== -1) {
                                 dummyLogHarian[existingIndex] = logData;
                             } else {
                                 dummyLogHarian.push(logData);
                             }
 
-                            // 4. Update Rekap Absensi berdasarkan SELISIH (Delta) sehingga terhindar dari double entry
                             let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
                             if (indexPegawai !== -1) {
                                 dummyAbsensi[indexPegawai].hadir += (hadirBaru - oldHadir);
@@ -1493,8 +1533,7 @@
                                 dummyAbsensi.push({
                                     id: Date.now() + Math.random(),
                                     nama: record.nama, nip: record.nip, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
-                                    hariKerja: 22,
-                                    hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit, tanpaKet: 0
+                                    hariKerja: 22, hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit, tanpaKet: 0
                                 });
                             }
                         });
@@ -1503,7 +1542,6 @@
 
                         dummyAbsensi.forEach(p => {
                             p.hariKerja = hkOtomatis;
-                            // Karena hadir sudah mencakup status izin/sakit, kita tidak perlu menambahkan izinSakit lagi
                             let totalTercatat = p.hadir;
                             p.tanpaKet = p.hariKerja - totalTercatat;
                             if (p.tanpaKet < 0) p.tanpaKet = 0;
@@ -1525,7 +1563,6 @@
         }
 
         function downloadExcelAbsen() {
-            // Hapus pembatasan filter sekolah agar SEMUA SEKOLAH terekspor
             const filterTglVal = document.getElementById('filterTanggalAbsen') ? document.getElementById('filterTanggalAbsen').value : "ALL";
             const filterBlnVal = document.getElementById('filterBulanAbsen') ? parseInt(document.getElementById('filterBulanAbsen').value) : (new Date().getMonth() + 1);
             const filterThnVal = document.getElementById('filterTahunAbsen') ? parseInt(document.getElementById('filterTahunAbsen').value) : new Date().getFullYear();
@@ -1534,7 +1571,6 @@
             let isHarian = (filterTglVal !== "ALL");
             let hkOtomatis = isHarian ? 1 : hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
             
-            // Kita rekap datanya ulang tanpa menggunakan data yang terfilter di tabel UI
             let dataTampil = [];
             if (isHarian) {
                 let targetDay = parseInt(filterTglVal);
@@ -1571,7 +1607,6 @@
                 return;
             }
 
-            // Map data utama
             let dataExport = dataTampil.map((a, i) => ({
                 'No': i + 1,
                 'Nama Pegawai': a.nama,
@@ -1585,17 +1620,14 @@
                 'Tanpa Keterangan': a.tanpaKet
             }));
 
-            // Tambahkan Format Tanda Tangan
             let today = new Date();
             let dateStr = today.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
             
-            dataExport.push({}); // Baris Kosong
+            dataExport.push({}); 
             dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': `.................., ${dateStr}` });
             dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Mengetahui,' });
             dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Kepala Sekolah' });
-            dataExport.push({}); // Space untuk Tanda tangan
-            dataExport.push({}); 
-            dataExport.push({}); 
+            dataExport.push({}); dataExport.push({}); dataExport.push({}); 
             dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NAMA' });
             dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NIP. ....................' });
 
@@ -1604,86 +1636,10 @@
                 : `Rekap_Semua_Sekolah_Bulanan_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
 
             let ws = XLSX.utils.json_to_sheet(dataExport);
-            
-            // Atur agar kolom terlihat rapih/border default Excel tertata
             ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
 
             let wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Rekap Keseluruhan");
-            XLSX.writeFile(wb, namaFile);
-        }
-
-        // FUNGSI BARU UNTUK EXPORT INDISIPLINER
-        function downloadExcelIndisipliner() {
-            const filterBlnVal = document.getElementById('filterBulanIndisipliner') ? parseInt(document.getElementById('filterBulanIndisipliner').value) : (new Date().getMonth() + 1);
-            const filterThnVal = document.getElementById('filterTahunIndisipliner') ? parseInt(document.getElementById('filterTahunIndisipliner').value) : new Date().getFullYear();
-            
-            let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-            let hkOtomatis = hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
-            
-            let dataIndisipliner = [];
-            dummyAbsensi.forEach(p => {
-                let logsBulanIni = dummyLogHarian.filter(l => String(l.nip).trim() === String(p.nip).trim() && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal);
-                let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
-                
-                logsBulanIni.forEach(log => {
-                    totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
-                    totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
-                });
-
-                let tk = hkOtomatis - (totHadir + totIzin);
-                if (tk < 0) tk = 0;
-                
-                // Ambil semua sekolah yang indisipliner >= 1
-                if (tk >= 1) {
-                    dataIndisipliner.push({
-                        nama: p.nama, nip: p.nip, sekolah: p.sekolah || '-', hariKerja: hkOtomatis,
-                        hadir: totHadir, terlambatMin: totTelat, cepatPulangMin: totCepat, izinSakit: totIzin, tanpaKet: tk
-                    });
-                }
-            });
-
-            dataIndisipliner.sort((a, b) => b.tanpaKet - a.tanpaKet); // Sort terbanyak
-
-            if(dataIndisipliner.length === 0) {
-                Swal.fire('Kosong', 'Tidak ada data indisipliner untuk bulan ini.', 'warning');
-                return;
-            }
-
-            let dataExport = dataIndisipliner.map((a, i) => ({
-                'No': i + 1,
-                'Nama Pegawai': a.nama,
-                'NIP': a.nip,
-                'Sekolah': a.sekolah,
-                'Hari Kerja': a.hariKerja,
-                'Hadir': a.hadir,
-                'Keterlambatan (Mnt)': a.terlambatMin,
-                'Cepat Pulang (Mnt)': a.cepatPulangMin,
-                'Izin/Sakit/DL': a.izinSakit,
-                'Tanpa Keterangan': a.tanpaKet
-            }));
-
-            // Tambahkan Format Tanda Tangan
-            let today = new Date();
-            let dateStr = today.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
-            
-            dataExport.push({}); // Baris Kosong
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': `.................., ${dateStr}` });
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Mengetahui,' });
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Kepala Sekolah' });
-            dataExport.push({}); // Space TTD
-            dataExport.push({}); 
-            dataExport.push({}); 
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NAMA' });
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NIP. ....................' });
-
-            let namaFile = `Laporan_Indisipliner_Semua_Sekolah_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
-
-            let ws = XLSX.utils.json_to_sheet(dataExport);
-            ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
-
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Lap. Indisipliner");
             XLSX.writeFile(wb, namaFile);
         }
 
@@ -1763,7 +1719,6 @@
                         </table>
                     </div>
                     
-                    <!-- Tambahan div untuk nomor paginasi halaman -->
                     <div id="paginationIndisipliner" class="flex justify-center mt-6 gap-2 flex-wrap"></div>
                 </div>
             `;
@@ -1772,7 +1727,6 @@
         }
 
         function downloadTemplatePegawai() {
-            // Header harus sesuai dengan yang dibaca oleh PapaParse di fungsi prosesUploadPegawaiCSV
             let csvContent = "data:text/csv;charset=utf-8,";
             csvContent += "nip,nama,sekolah,photo_uploaded\n";
             csvContent += "198001012005011001,Nama Pegawai Contoh,SMAN 1 WAJO,False\n";
@@ -1788,7 +1742,6 @@
         }
 
         function downloadTemplateSekolah() {
-            // Header harus sesuai dengan yang dibaca XLSX di fungsi prosesUploadSekolah
             let csvContent = "data:text/csv;charset=utf-8,";
             csvContent += "Nama Sekolah,NPSN,Kepala Sekolah,NIP\n";
             csvContent += "SMAN 1 CONTOH,10001111,Nama Kepsek Contoh,197001012000011001\n";
@@ -1852,7 +1805,6 @@
                 return;
             }
 
-            // --- SISTEM PAGINASI MAX 50 PEGAWAI PER HALAMAN ---
             let limit = 50;
             let totalPages = Math.ceil(filtered.length / limit);
             if (page < 1) page = 1;
@@ -1876,7 +1828,6 @@
                 </tr>
             `).join('');
 
-            // --- RENDER TOMBOL PAGINASI ---
             if (pagContainer) {
                 let paginationHtml = '';
                 if (totalPages > 1) {
@@ -1886,6 +1837,75 @@
                 }
                 pagContainer.innerHTML = paginationHtml;
             }
+        }
+
+        function downloadExcelIndisipliner() {
+            const filterBlnVal = document.getElementById('filterBulanIndisipliner') ? parseInt(document.getElementById('filterBulanIndisipliner').value) : (new Date().getMonth() + 1);
+            const filterThnVal = document.getElementById('filterTahunIndisipliner') ? parseInt(document.getElementById('filterTahunIndisipliner').value) : new Date().getFullYear();
+            
+            let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            let hkOtomatis = hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
+            
+            let dataIndisipliner = [];
+            dummyAbsensi.forEach(p => {
+                let logsBulanIni = dummyLogHarian.filter(l => String(l.nip).trim() === String(p.nip).trim() && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal);
+                let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                
+                logsBulanIni.forEach(log => {
+                    totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
+                    totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
+                });
+
+                let tk = hkOtomatis - (totHadir + totIzin);
+                if (tk < 0) tk = 0;
+                
+                if (tk >= 1) {
+                    dataIndisipliner.push({
+                        nama: p.nama, nip: p.nip, sekolah: p.sekolah || '-', hariKerja: hkOtomatis,
+                        hadir: totHadir, terlambatMin: totTelat, cepatPulangMin: totCepat, izinSakit: totIzin, tanpaKet: tk
+                    });
+                }
+            });
+
+            dataIndisipliner.sort((a, b) => b.tanpaKet - a.tanpaKet); 
+
+            if(dataIndisipliner.length === 0) {
+                Swal.fire('Kosong', 'Tidak ada data indisipliner untuk bulan ini.', 'warning');
+                return;
+            }
+
+            let dataExport = dataIndisipliner.map((a, i) => ({
+                'No': i + 1,
+                'Nama Pegawai': a.nama,
+                'NIP': a.nip,
+                'Sekolah': a.sekolah,
+                'Hari Kerja': a.hariKerja,
+                'Hadir': a.hadir,
+                'Keterlambatan (Mnt)': a.terlambatMin,
+                'Cepat Pulang (Mnt)': a.cepatPulangMin,
+                'Izin/Sakit/DL': a.izinSakit,
+                'Tanpa Keterangan': a.tanpaKet
+            }));
+
+            let today = new Date();
+            let dateStr = today.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
+            
+            dataExport.push({}); 
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': `.................., ${dateStr}` });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Mengetahui,' });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Kepala Sekolah' });
+            dataExport.push({}); dataExport.push({}); dataExport.push({}); 
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NAMA' });
+            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NIP. ....................' });
+
+            let namaFile = `Laporan_Indisipliner_Semua_Sekolah_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
+
+            let ws = XLSX.utils.json_to_sheet(dataExport);
+            ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
+
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Lap. Indisipliner");
+            XLSX.writeFile(wb, namaFile);
         }
     </script>
 </body>
