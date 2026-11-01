@@ -101,6 +101,9 @@
             updateTime();
             muatKalenderLiburOtomatis();
             
+            // JALANKAN PENGECEKAN AWAL BULAN OTOMATIS
+            periksaBackupOtomatis();
+
             const contentArea = document.getElementById('content-area');
             if (contentArea) {
                 contentArea.innerHTML = '<div class="text-center mt-20 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-blue-600"></i><br>Menghubungkan ke Database Google Spreadsheet...</div>';
@@ -118,7 +121,7 @@
                         switchView('dashboard');
                     })
                     .withFailureHandler(function(err) {
-                        console.warn("Koneksi Spreadsheet ditangguhkan, memuat antarmuka lokal:", err);
+                        console.warn("Koneksi Spreadsheet ditangguhkan:", err);
                         switchView('dashboard');
                     })
                     .ambilSemuaDataFromSheet();
@@ -126,6 +129,89 @@
                 switchView('dashboard');
             }
         };
+
+        // --- SISTEM PENGECEKAN BACKUP DI AWAL BULAN ---
+        function periksaBackupOtomatis() {
+            let tglHariIni = new Date().getDate();
+            // Akan trigger otomatis hanya saat aplikasi dibuka di antara tanggal 1 sampai 3 (Awal Bulan)
+            if (tglHariIni >= 1 && tglHariIni <= 3) {
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    google.script.run
+                        .withSuccessHandler(function(res) {
+                            if (res.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Sistem Teroptimasi',
+                                    html: '<b style="color:#166534">data BERHASIL di bakcup ke Database Arsip Absensi silahkan dicek</b>',
+                                    background: '#dcfce7', // Latar Warna Hijau
+                                    color: '#166534',
+                                    confirmButtonColor: '#16a34a'
+                                });
+                            } else if (res.status === 'fail') {
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: 'Peringatan Sistem!',
+                                    html: '<b style="color:#991b1b">data GAGAL di bacup ke Database Arsip Absensi silahka dicek kembali lalu klik tombol bacup manual</b>',
+                                    background: '#fee2e2', // Latar Warna Merah
+                                    color: '#991b1b',
+                                    confirmButtonColor: '#dc2626'
+                                });
+                            }
+                            // Jika status no_data atau already_backed_up, sistem akan diam dan aman.
+                        })
+                        .prosesBackupDanResetBulanan();
+                }
+            }
+        }
+
+        // --- FUNGSI TOMBOL BACKUP MANUAL ---
+        function backupManual() {
+            Swal.fire({
+                title: 'Backup & Kosongkan Data',
+                text: 'Tindakan ini akan membackup Rekap Absen & Log Harian ke Spreadsheet ke-2, lalu me-reset/menghapus data di sistem ini agar aplikasi kembali cepat dan ringan. Lanjutkan?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#4f46e5',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Backup & Reset Sekarang'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Memproses Backup...',
+                        html: 'Mengkopi dan memverifikasi data. Mohon tunggu.',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+                    
+                    if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        google.script.run
+                            .withSuccessHandler(function(res) {
+                                if (res.status === 'success') {
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Berhasil!',
+                                        html: '<b style="color:#166534">data BERHASIL di bakcup ke sepersheet ke 2 silahkan dicek</b>',
+                                        background: '#dcfce7', color: '#166534', confirmButtonColor: '#16a34a'
+                                    }).then(() => location.reload()); // Muat ulang web agar segar kembali
+                                } else if (res.status === 'fail') {
+                                    Swal.fire({
+                                        icon: 'warning',
+                                        title: 'Gagal!',
+                                        html: '<b style="color:#991b1b">data GAGAL di bacup ke sepersheet ke 2 silahka dicek kembali lalu klik tombol bacup manual</b>',
+                                        background: '#fee2e2', color: '#991b1b', confirmButtonColor: '#dc2626'
+                                    });
+                                } else if (res.status === 'already_backed_up' || res.status === 'no_data') {
+                                    Swal.fire('Info Sistem', res.message, 'info');
+                                }
+                            })
+                            .withFailureHandler(function(err) {
+                                Swal.fire('Error Database', err.message, 'error');
+                            })
+                            .prosesBackupDanResetBulanan();
+                    }
+                }
+            });
+        }
 
         function hitungHariKerjaBulanIni(year, month) {
             let totalWorkdays = 0;
@@ -473,6 +559,13 @@
             const bulanIni = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
 
             container.innerHTML = `
+                <!-- TOMBOL MANUAL BACKUP -->
+                <div class="flex justify-end mb-4">
+                    <button onclick="backupManual()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm font-semibold transition-all">
+                        <i class="fa-solid fa-server"></i> Backup & Kosongkan Data Server
+                    </button>
+                </div>
+                
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div class="glass-card p-6 border-l-4 border-blue-500 flex items-center">
                         <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4"><i class="fa-solid fa-school text-xl"></i></div>
