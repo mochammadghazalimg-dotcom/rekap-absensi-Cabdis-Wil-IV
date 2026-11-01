@@ -75,6 +75,7 @@
         let dummyAbsensi = [];      
         let dummyPegawai = []; 
         let dummyLogHarian = []; 
+        let dummyArsip = []; // VARIABEL BARU UNTUK MENYIMPAN ARSIP
         let currentChart = null;
         let currentPieChart = null;
 
@@ -100,13 +101,11 @@
         window.onload = function() {
             updateTime();
             muatKalenderLiburOtomatis();
-            
-            // JALANKAN PENGECEKAN AWAL BULAN OTOMATIS
             periksaBackupOtomatis();
 
             const contentArea = document.getElementById('content-area');
             if (contentArea) {
-                contentArea.innerHTML = '<div class="text-center mt-20 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-blue-600"></i><br>Menghubungkan ke Database Google Spreadsheet...</div>';
+                contentArea.innerHTML = '<div class="text-center mt-20 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-blue-600"></i><br>Menghubungkan ke Database...</div>';
             }
 
             if (typeof google !== 'undefined' && google.script && google.script.run) {
@@ -117,11 +116,12 @@
                             if (db.absensi && db.absensi.length > 0) dummyAbsensi = db.absensi;
                             if (db.pegawai && db.pegawai.length > 0) dummyPegawai = db.pegawai;
                             if (db.logHarian && db.logHarian.length > 0) dummyLogHarian = db.logHarian;
+                            if (db.arsip && db.arsip.length > 0) dummyArsip = db.arsip; // MEMUAT ARSIP
                         }
                         switchView('dashboard');
                     })
                     .withFailureHandler(function(err) {
-                        console.warn("Koneksi Spreadsheet ditangguhkan:", err);
+                        console.warn("Gagal load DB:", err);
                         switchView('dashboard');
                     })
                     .ambilSemuaDataFromSheet();
@@ -133,33 +133,28 @@
         // --- SISTEM PENGECEKAN BACKUP DI AWAL BULAN ---
         function periksaBackupOtomatis() {
             let tglHariIni = new Date().getDate();
-            // Akan trigger otomatis hanya saat aplikasi dibuka di antara tanggal 1 sampai 3 (Awal Bulan)
             if (tglHariIni >= 1 && tglHariIni <= 3) {
                 if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    
+                    // Ambil target bulan lalu untuk dibackup
+                    let now = new Date();
+                    let targetBulan = now.getMonth(); 
+                    let targetTahun = now.getFullYear();
+                    if (targetBulan === 0) { targetBulan = 12; targetTahun -= 1; }
+                    
+                    // Generate Snapshot paksa dari data mentah sebelum dikosongkan
+                    let snapshotObj = getDashboardData(targetBulan, targetTahun, true);
+                    let snapshotJSON = JSON.stringify(snapshotObj);
+
                     google.script.run
                         .withSuccessHandler(function(res) {
                             if (res.status === 'success') {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Sistem Teroptimasi',
-                                    html: '<b style="color:#166534">data BERHASIL di bakcup ke Database Arsip Absensi silahkan dicek</b>',
-                                    background: '#dcfce7', // Latar Warna Hijau
-                                    color: '#166534',
-                                    confirmButtonColor: '#16a34a'
-                                });
+                                Swal.fire({ icon: 'success', title: 'Sistem Teroptimasi', html: '<b style="color:#166534">Data BERHASIL dibackup ke Arsip.</b>', background: '#dcfce7' });
                             } else if (res.status === 'fail') {
-                                Swal.fire({
-                                    icon: 'warning',
-                                    title: 'Peringatan Sistem!',
-                                    html: '<b style="color:#991b1b">data GAGAL di bacup ke Database Arsip Absensi silahka dicek kembali lalu klik tombol bacup manual</b>',
-                                    background: '#fee2e2', // Latar Warna Merah
-                                    color: '#991b1b',
-                                    confirmButtonColor: '#dc2626'
-                                });
+                                Swal.fire({ icon: 'warning', title: 'Peringatan Sistem!', html: '<b style="color:#991b1b">Data GAGAL dibackup. Coba manual.</b>', background: '#fee2e2' });
                             }
-                            // Jika status no_data atau already_backed_up, sistem akan diam dan aman.
                         })
-                        .prosesBackupDanResetBulanan();
+                        .prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun);
                 }
             }
         }
@@ -168,46 +163,39 @@
         function backupManual() {
             Swal.fire({
                 title: 'Backup & Kosongkan Data',
-                text: 'Tindakan ini akan membackup Rekap Absen & Log Harian ke Spreadsheet ke-2, lalu me-reset/menghapus data di sistem ini agar aplikasi kembali cepat dan ringan. Lanjutkan?',
+                text: 'Tindakan ini akan membuat Snapshot Dashboard, membackup data mentah, lalu me-reset sistem ini. Lanjutkan?',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#4f46e5',
                 cancelButtonColor: '#64748b',
-                confirmButtonText: 'Ya, Backup & Reset Sekarang'
+                confirmButtonText: 'Ya, Backup & Reset'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Memproses Backup...',
-                        html: 'Mengkopi dan memverifikasi data. Mohon tunggu.',
-                        allowOutsideClick: false,
-                        didOpen: () => { Swal.showLoading(); }
-                    });
+                    Swal.fire({ title: 'Memproses Backup...', html: 'Mengamankan Snapshot & Arsip. Mohon tunggu.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
                     
                     if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        
+                        // Siapkan Snapshot bulan lalu (karena kita backup bulan lalu)
+                        let now = new Date();
+                        let targetBulan = now.getMonth(); 
+                        let targetTahun = now.getFullYear();
+                        if (targetBulan === 0) { targetBulan = 12; targetTahun -= 1; }
+                        
+                        let snapshotObj = getDashboardData(targetBulan, targetTahun, true);
+                        let snapshotJSON = JSON.stringify(snapshotObj);
+
                         google.script.run
                             .withSuccessHandler(function(res) {
                                 if (res.status === 'success') {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Berhasil!',
-                                        html: '<b style="color:#166534">data BERHASIL di bakcup ke sepersheet ke 2 silahkan dicek</b>',
-                                        background: '#dcfce7', color: '#166534', confirmButtonColor: '#16a34a'
-                                    }).then(() => location.reload()); // Muat ulang web agar segar kembali
+                                    Swal.fire({ icon: 'success', title: 'Berhasil!', html: '<b style="color:#166534">Data BERHASIL dibackup ke Sheet ke 2 & Snapshot tersimpan.</b>', background: '#dcfce7' }).then(() => location.reload());
                                 } else if (res.status === 'fail') {
-                                    Swal.fire({
-                                        icon: 'warning',
-                                        title: 'Gagal!',
-                                        html: '<b style="color:#991b1b">data GAGAL di bacup ke sepersheet ke 2 silahka dicek kembali lalu klik tombol bacup manual</b>',
-                                        background: '#fee2e2', color: '#991b1b', confirmButtonColor: '#dc2626'
-                                    });
+                                    Swal.fire({ icon: 'warning', title: 'Gagal!', html: '<b style="color:#991b1b">Gagal membackup.</b>', background: '#fee2e2' });
                                 } else if (res.status === 'already_backed_up' || res.status === 'no_data') {
                                     Swal.fire('Info Sistem', res.message, 'info');
                                 }
                             })
-                            .withFailureHandler(function(err) {
-                                Swal.fire('Error Database', err.message, 'error');
-                            })
-                            .prosesBackupDanResetBulanan();
+                            .withFailureHandler(function(err) { Swal.fire('Error Database', err.message, 'error'); })
+                            .prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun);
                     }
                 }
             });
@@ -464,104 +452,136 @@
             event.target.value = '';
         }
 
-        function renderDashboard(container) {
-            if(!container) return;
-            let totalPegawai = dummyPegawai.length > 0 ? dummyPegawai.length : (dummyAbsensi.length || 0);
+        // --- FUNGSI MENGAMBIL DATA (DARI ARSIP ATAU HITUNG MANUAL) ---
+        function getDashboardData(bulan, tahun, forceCalculate = false) {
+            // 1. Cek dari database arsip yang disimpan! (Jika tidak forceCalculate)
+            if (!forceCalculate) {
+                let arsipMatch = dummyArsip.find(a => parseInt(a.bulan) === bulan && parseInt(a.tahun) === tahun);
+                if (arsipMatch && arsipMatch.snapshot) {
+                    console.log("Memuat data dashboard dari Arsip untuk", bulan, tahun);
+                    return JSON.parse(arsipMatch.snapshot);
+                }
+            }
+
+            // 2. Jika Arsip belum ada atau forceCalculate (Kalkulasi dari data log/absen aktif)
+            let hkOtomatis = hitungHariKerjaBulanIni(tahun, bulan);
+            let absensiDashboard = JSON.parse(JSON.stringify(dummyAbsensi));
+            
+            absensiDashboard.forEach(p => {
+                let pNipClean = String(p.nip || '').replace(/['\s]/g, '');
+                let logsBulanIni = dummyLogHarian.filter(l => {
+                    let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
+                    let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
+                    return logNipClean === pNipClean && parseInt(l.mm) === bulan && lYear === tahun;
+                });
+
+                let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                logsBulanIni.forEach(log => {
+                    totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
+                    totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
+                });
+
+                p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat; p.izinSakit = totIzin; p.hariKerja = hkOtomatis;
+                let tk = hkOtomatis - (totHadir + totIzin); p.tanpaKet = tk < 0 ? 0 : tk;
+            });
+
+            let totalPegawai = dummyPegawai.length > 0 ? dummyPegawai.length : (absensiDashboard.length || 0);
             let totalSekolah = dummySekolah.length || 0;
             let totTerlambatMin = 0, totCepatPulangMin = 0, totIzinSakit = 0, totTanpaKet = 0;
             
-            // 1. Menghitung total ASN pada masing-masing sekolah
             let schoolStats = dummySekolah.map(s => {
                 let pegSekolah = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(s.nama.toUpperCase()));
                 let totalASN = pegSekolah.length;
+                if (totalASN === 0) totalASN = absensiDashboard.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase())).length;
 
-                // Jika di master pegawai tidak ada, cek dari riwayat absensi
-                if (totalASN === 0) {
-                    totalASN = dummyAbsensi.filter(a => String(a.sekolahId) === String(s.id) || (a.sekolah || '').toUpperCase().includes(s.nama.toUpperCase())).length;
-                }
-                
-                // HAPUS atau KOMENTARI baris ini agar totalASN yang 0 tidak diubah menjadi 1
-                // if (totalASN === 0) totalASN = 1; 
-
-                return { 
-                    id: s.id, 
-                    nama: s.nama, 
-                    totalASN: totalASN, // totalASN murni (bisa 0)
-                    terlambatMin: 0, 
-                    cepatPulangMin: 0, 
-                    tanpaKet: 0, 
-                    hadir: 0,
-                    avgTerlambatMin: 0,
-                    avgCepatPulangMin: 0,
-                    avgTanpaKet: 0
-                };
+                return { id: s.id, nama: s.nama, totalASN: totalASN, terlambatMin: 0, cepatPulangMin: 0, tanpaKet: 0, hadir: 0, avgTerlambatMin: 0, avgCepatPulangMin: 0, avgTanpaKet: 0 };
             });
 
-            // Akumulasi data absensi ke masing-masing sekolah
-            dummyAbsensi.forEach(absen => {
-                totTerlambatMin += parseInt(absen.terlambatMin) || 0;
-                totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
-                totIzinSakit += parseInt(absen.izinSakit) || 0;
-                totTanpaKet += parseInt(absen.tanpaKet) || 0;
+            absensiDashboard.forEach(absen => {
+                totTerlambatMin += parseInt(absen.terlambatMin) || 0; totCepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
+                totIzinSakit += parseInt(absen.izinSakit) || 0; totTanpaKet += parseInt(absen.tanpaKet) || 0;
 
                 let s = schoolStats.find(x => String(x.id) === String(absen.sekolahId) || x.nama.toUpperCase().includes((absen.sekolah || '').toUpperCase()));
                 if(s) {
-                    s.terlambatMin += parseInt(absen.terlambatMin) || 0;
-                    s.cepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
-                    s.tanpaKet += parseInt(absen.tanpaKet) || 0;
-                    s.hadir += parseInt(absen.hadir) || 0;
+                    s.terlambatMin += parseInt(absen.terlambatMin) || 0; s.cepatPulangMin += parseInt(absen.cepatPulangMin) || 0;
+                    s.tanpaKet += parseInt(absen.tanpaKet) || 0; s.hadir += parseInt(absen.hadir) || 0;
                 }
             });
 
-            // 2. Hitung rata-rata HANYA JIKA sekolah memiliki ASN (totalASN > 0)
             schoolStats.forEach(s => {
                 if (s.totalASN > 0) {
                     s.avgTanpaKet = parseFloat((s.tanpaKet / s.totalASN).toFixed(1));
                     s.avgTerlambatMin = Math.round(s.terlambatMin / s.totalASN);
                     s.avgCepatPulangMin = Math.round(s.cepatPulangMin / s.totalASN);
-                } else {
-                    // Jika tidak ada ASN, set rata-rata ke 0
-                    s.avgTanpaKet = 0;
-                    s.avgTerlambatMin = 0;
-                    s.avgCepatPulangMin = 0;
-                }
+                } else { s.avgTanpaKet = 0; s.avgTerlambatMin = 0; s.avgCepatPulangMin = 0; }
             });
 
-            // 3. FILTER SEKOLAH AKTIF: Pisahkan sekolah yang memiliki minimal 1 ASN
             let activeSchools = schoolStats.filter(s => s.totalASN > 0);
 
-            // 4. Ubah perhitungan Top dan Best menggunakan `activeSchools`, bukan `schoolStats`
             let top5AlpaSekolah = [...activeSchools].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
             let top5TerlambatSekolah = [...activeSchools].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
             let top5CepatPulangSekolah = [...activeSchools].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin).slice(0, 5);
-
             let best5AlpaSekolah = [...activeSchools].sort((a,b) => a.avgTanpaKet - b.avgTanpaKet).slice(0, 5);
             let best5TerlambatSekolah = [...activeSchools].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
             let best5CepatPulangSekolah = [...activeSchools].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
 
-            let candidatesASN = dummyAbsensi.filter(a => (parseInt(a.hadir) || 0) > 0);
-            if (candidatesASN.length === 0) candidatesASN = [...dummyAbsensi];
+            let candidatesASN = absensiDashboard.filter(a => (parseInt(a.hadir) || 0) > 0);
+            if (candidatesASN.length === 0) candidatesASN = [...absensiDashboard];
 
             let top5ASN = candidatesASN.sort((a, b) => {
-                let hadirA = parseInt(a.hadir) || 0; let hadirB = parseInt(b.hadir) || 0;
-                let tanpaKetA = parseInt(a.tanpaKet) || 0; let tanpaKetB = parseInt(b.tanpaKet) || 0;
-                let izinA = parseInt(a.izinSakit) || 0; let izinB = parseInt(b.izinSakit) || 0;
-                let telatA = parseInt(a.terlambatMin) || 0; let telatB = parseInt(b.terlambatMin) || 0;
-                let cepatA = parseInt(a.cepatPulangMin) || 0; let cepatB = parseInt(b.cepatPulangMin) || 0;
+                let hA = parseInt(a.hadir)||0; let hB = parseInt(b.hadir)||0;
+                let tkA = parseInt(a.tanpaKet)||0; let tkB = parseInt(b.tanpaKet)||0;
+                let iA = parseInt(a.izinSakit)||0; let iB = parseInt(b.izinSakit)||0;
+                let tA = parseInt(a.terlambatMin)||0; let tB = parseInt(b.terlambatMin)||0;
+                let cA = parseInt(a.cepatPulangMin)||0; let cB = parseInt(b.cepatPulangMin)||0;
 
-                if (hadirB !== hadirA) return hadirB - hadirA;
-                if (tanpaKetA !== tanpaKetB) return tanpaKetA - tanpaKetB;
-                if (izinA !== izinB) return izinA - izinB;
-                if (telatA !== telatB) return telatA - telatB;
-                return cepatA - cepatB;
+                if (hB !== hA) return hB - hA;
+                if (tkA !== tkB) return tkA - tkB;
+                if (iA !== iB) return iA - iB;
+                if (tA !== tB) return tA - tB;
+                return cA - cB;
             }).slice(0, 5);
 
-            const bulanIni = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+            return { totalPegawai, totalSekolah, totTerlambatMin, totCepatPulangMin, totIzinSakit, totTanpaKet, top5ASN, top5AlpaSekolah, top5TerlambatSekolah, top5CepatPulangSekolah, best5AlpaSekolah, best5TerlambatSekolah, best5CepatPulangSekolah, schoolStats };
+        }
+
+        // --- RENDER DASHBOARD MENGGUNAKAN SNAPSHOT / DATA AKTIF ---
+        function renderDashboard(container) {
+            if(!container) return;
+
+            const filterBulanEl = document.getElementById('filterBulanDashboard');
+            const filterTahunEl = document.getElementById('filterTahunDashboard');
+            
+            let now = new Date();
+            let currentBulan = filterBulanEl ? parseInt(filterBulanEl.value) : now.getMonth() + 1;
+            let currentTahun = filterTahunEl ? parseInt(filterTahunEl.value) : now.getFullYear();
+
+            if (!filterBulanEl && !filterTahunEl) {
+                if (now.getDate() <= 7) {
+                    currentBulan = now.getMonth();
+                    if (currentBulan === 0) { currentBulan = 12; currentTahun -= 1; }
+                }
+            }
+
+            let namaBulanArr = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            let optionBulan = namaBulanArr.map((b, idx) => `<option value="${idx + 1}" ${idx + 1 === currentBulan ? 'selected' : ''}>${b}</option>`).join('');
+            let tahunList = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+            let optionTahun = tahunList.map(t => `<option value="${t}" ${t === currentTahun ? 'selected' : ''}>${t}</option>`).join('');
+
+            // AMBIL DATA DARI FUNGSI (BISA DARI ARSIP ATAU HITUNG MANUAL)
+            let dash = getDashboardData(currentBulan, currentTahun);
+            const labelPeriode = `${namaBulanArr[currentBulan - 1]} ${currentTahun}`;
 
             container.innerHTML = `
-                <!-- TOMBOL MANUAL BACKUP -->
-                <div class="flex justify-end mb-4">
-                    <button onclick="backupManual()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm font-semibold transition-all">
+                <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                    <div class="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-slate-200">
+                        <div class="flex items-center gap-2 text-slate-700">
+                            <i class="fa-solid fa-calendar-day text-blue-600"></i><span class="text-sm font-bold">Periode Dashboard:</span>
+                        </div>
+                        <select id="filterBulanDashboard" onchange="renderDashboard(document.getElementById('content-area'))" class="p-2 border border-slate-300 rounded text-sm w-36 bg-slate-50 font-semibold cursor-pointer hover:border-blue-500">${optionBulan}</select>
+                        <select id="filterTahunDashboard" onchange="renderDashboard(document.getElementById('content-area'))" class="p-2 border border-slate-300 rounded text-sm w-24 bg-slate-50 font-semibold cursor-pointer hover:border-blue-500">${optionTahun}</select>
+                    </div>
+                    <button onclick="backupManual()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-3 rounded-lg shadow-md flex items-center gap-2 text-sm font-semibold transition-all">
                         <i class="fa-solid fa-server"></i> Backup & Kosongkan Data Server
                     </button>
                 </div>
@@ -569,156 +589,86 @@
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div class="glass-card p-6 border-l-4 border-blue-500 flex items-center">
                         <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4"><i class="fa-solid fa-school text-xl"></i></div>
-                        <div><p class="text-sm text-slate-500 font-medium">Total Sekolah</p><p class="text-2xl font-bold text-slate-800">${totalSekolah}</p></div>
+                        <div><p class="text-sm text-slate-500 font-medium">Total Sekolah</p><p class="text-2xl font-bold text-slate-800">${dash.totalSekolah}</p></div>
                     </div>
                     <div class="glass-card p-6 border-l-4 border-emerald-500 flex items-center">
                         <div class="p-3 rounded-full bg-emerald-100 text-emerald-600 mr-4"><i class="fa-solid fa-users text-xl"></i></div>
-                        <div><p class="text-sm text-slate-500 font-medium">Pegawai Terekam</p><p class="text-2xl font-bold text-slate-800">${totalPegawai}</p></div>
+                        <div><p class="text-sm text-slate-500 font-medium">Pegawai Terekam</p><p class="text-2xl font-bold text-slate-800">${dash.totalPegawai}</p></div>
                     </div>
                     <div class="glass-card p-6 border-l-4 border-orange-500 flex items-center">
                         <div class="p-3 rounded-full bg-orange-100 text-orange-600 mr-4"><i class="fa-solid fa-clock text-xl"></i></div>
-                        <div><p class="text-sm text-slate-500 font-medium">Total Keterlambatan</p><p class="text-2xl font-bold text-orange-600">${totTerlambatMin} <span class="text-xs font-normal">Menit</span></p></div>
+                        <div><p class="text-sm text-slate-500 font-medium">Total Keterlambatan</p><p class="text-2xl font-bold text-orange-600">${dash.totTerlambatMin} <span class="text-xs font-normal">Menit</span></p></div>
                     </div>
                     <div class="glass-card p-6 border-l-4 border-red-500 flex items-center">
                         <div class="p-3 rounded-full bg-red-100 text-red-600 mr-4"><i class="fa-solid fa-triangle-exclamation text-xl"></i></div>
-                        <div><p class="text-sm text-slate-500 font-medium">Tanpa Keterangan</p><p class="text-2xl font-bold text-red-600">${totTanpaKet} <span class="text-xs font-normal">Hari</span></p></div>
+                        <div><p class="text-sm text-slate-500 font-medium">Tanpa Keterangan</p><p class="text-2xl font-bold text-red-600">${dash.totTanpaKet} <span class="text-xs font-normal">Hari</span></p></div>
                     </div>
                 </div>
 
                 <div class="mb-8">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-bold text-lg text-amber-700 flex items-center">
-                            <i class="fa-solid fa-certificate text-yellow-500 text-xl mr-2"></i> Top 5 ASN Teladan Presensi (${bulanIni})
-                        </h3>
-                        <span class="text-xs font-semibold bg-amber-100 text-amber-800 px-3 py-1 rounded-full"><i class="fa-solid fa-camera mr-1"></i> Klik ASN untuk Download Kartu Sertifikat</span>
+                        <h3 class="font-bold text-lg text-amber-700 flex items-center"><i class="fa-solid fa-certificate text-yellow-500 text-xl mr-2"></i> Top 5 ASN Teladan Presensi (${labelPeriode})</h3>
+                        <span class="text-xs font-semibold bg-amber-100 text-amber-800 px-3 py-1 rounded-full"><i class="fa-solid fa-camera mr-1"></i> Klik ASN untuk Download Kartu</span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                        ${top5ASN.length > 0 ? top5ASN.map((asn, i) => `
+                        ${dash.top5ASN.length > 0 ? dash.top5ASN.map((asn, i) => `
                             <div onclick="tampilkanKartuASN('${encodeURIComponent(JSON.stringify(asn))}')" class="glass-card bg-gradient-to-b from-amber-50 to-white border border-amber-200 p-4 rounded-xl flex flex-col items-center text-center clickable-row hover-card relative overflow-hidden">
                                 <div class="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">#${i+1} TELADAN</div>
-                                <div class="w-12 h-12 rounded-full bg-amber-100 border-2 border-amber-400 flex items-center justify-center text-amber-600 mb-2 mt-1">
-                                    <i class="fa-solid fa-user-check text-xl"></i>
-                                </div>
+                                <div class="w-12 h-12 rounded-full bg-amber-100 border-2 border-amber-400 flex items-center justify-center text-amber-600 mb-2 mt-1"><i class="fa-solid fa-user-check text-xl"></i></div>
                                 <p class="font-bold text-xs text-slate-800 truncate w-full" title="${asn.nama}">${asn.nama}</p>
                                 <p class="text-[10px] text-slate-500 truncate w-full mb-2">${asn.sekolah}</p>
                                 <div class="w-full bg-white p-2 rounded border border-amber-100 text-[10px] grid grid-cols-2 gap-1 text-slate-600">
-                                    <div>Hadir: <b class="text-emerald-600">${asn.hadir || 0}</b></div>
-                                    <div>Alpa: <b class="text-slate-800">${asn.tanpaKet || 0}</b></div>
-                                    <div class="col-span-2">Keterlambatan: <b class="text-amber-600">${asn.terlambatMin || 0}M</b></div>
-                                    <div class="col-span-2">Cepat Pulang: <b class="text-amber-600">${asn.cepatPulangMin || 0}M</b></div>
+                                    <div>Hadir: <b class="text-emerald-600">${asn.hadir || 0}</b></div><div>Alpa: <b class="text-slate-800">${asn.tanpaKet || 0}</b></div>
+                                    <div class="col-span-2">Keterlambatan: <b class="text-amber-600">${asn.terlambatMin || 0}M</b></div><div class="col-span-2">Cepat Pulang: <b class="text-amber-600">${asn.cepatPulangMin || 0}M</b></div>
                                 </div>
                             </div>
-                        `).join('') : '<div class="col-span-5 p-4 text-center text-slate-400 glass-card">Belum ada data presensi ASN.</div>'}
+                        `).join('') : '<div class="col-span-5 p-4 text-center text-slate-400 glass-card">Belum ada arsip data presensi ASN untuk periode ini.</div>'}
                     </div>
                 </div>
 
                 <div class="mb-8">
-                    <h3 class="font-bold text-lg text-red-700 flex items-center mb-4">
-                        <i class="fa-solid fa-box-archive text-red-600 mr-2"></i> Peringkat Evaluasi Presensi Sekolah (Tinggi Pelanggaran Rata-Rata per ASN)
-                    </h3>
+                    <h3 class="font-bold text-lg text-red-700 flex items-center mb-4"><i class="fa-solid fa-box-archive text-red-600 mr-2"></i> Peringkat Evaluasi Presensi (${labelPeriode})</h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-red-600">
-                            <div class="bg-red-50 p-3 font-semibold text-red-800 text-sm flex items-center justify-between">
-                                <span><i class="fa-solid fa-square-full text-red-600 mr-2"></i> Tanpa Ket. Terbanyak</span>
-                                <i class="fa-solid fa-triangle-exclamation text-red-500"></i>
-                            </div>
+                            <div class="bg-red-50 p-3 font-semibold text-red-800 text-sm flex items-center justify-between"><span><i class="fa-solid fa-square-full text-red-600 mr-2"></i> Tanpa Ket. Terbanyak</span></div>
                             <ul class="p-2">
-                                ${top5AlpaSekolah.map((item, i) => `
-                                    <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <div class="truncate font-medium text-slate-700">
-                                            <span>${i+1}.${item.nama}</span>
-                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.tanpaKet} Hari)</span>
-                                        </div>
-                                        <span class="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTanpaKet} Hari/ASN</span>
-                                    </li>`).join('')}
+                                ${dash.top5AlpaSekolah.map((item, i) => `<li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row"><div class="truncate font-medium text-slate-700"><span>${i+1}. ${item.nama}</span><span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.tanpaKet} Hari)</span></div><span class="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTanpaKet} Hari/ASN</span></li>`).join('')}
                             </ul>
                         </div>
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-orange-500">
-                            <div class="bg-orange-50 p-3 font-semibold text-orange-800 text-sm flex items-center justify-between">
-                                <span><i class="fa-solid fa-square-full text-orange-500 mr-2"></i> Keterlambatan Terbanyak</span>
-                                <i class="fa-solid fa-clock-rotate-left text-orange-500"></i>
-                            </div>
+                            <div class="bg-orange-50 p-3 font-semibold text-orange-800 text-sm flex items-center justify-between"><span><i class="fa-solid fa-square-full text-orange-500 mr-2"></i> Keterlambatan Terbanyak</span></div>
                             <ul class="p-2">
-                                ${top5TerlambatSekolah.map((item, i) => `
-                                    <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <div class="truncate font-medium text-slate-700">
-                                            <span>${i+1}.${item.nama}</span>
-                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.terlambatMin} Mnt)</span>
-                                        </div>
-                                        <span class="bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTerlambatMin} Mnt/ASN</span>
-                                    </li>`).join('')}
+                                ${dash.top5TerlambatSekolah.map((item, i) => `<li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row"><div class="truncate font-medium text-slate-700"><span>${i+1}. ${item.nama}</span><span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.terlambatMin} Mnt)</span></div><span class="bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTerlambatMin} Mnt/ASN</span></li>`).join('')}
                             </ul>
                         </div>
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-amber-500">
-                            <div class="bg-amber-50 p-3 font-semibold text-amber-800 text-sm flex items-center justify-between">
-                                <span><i class="fa-solid fa-square-full text-amber-500 mr-2"></i> Pulang Cepat Terbanyak</span>
-                                <i class="fa-solid fa-person-running text-amber-500"></i>
-                            </div>
+                            <div class="bg-amber-50 p-3 font-semibold text-amber-800 text-sm flex items-center justify-between"><span><i class="fa-solid fa-square-full text-amber-500 mr-2"></i> Pulang Cepat Terbanyak</span></div>
                             <ul class="p-2">
-                                ${top5CepatPulangSekolah.map((item, i) => `
-                                    <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <div class="truncate font-medium text-slate-700">
-                                            <span>${i+1}.${item.nama}</span>
-                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.cepatPulangMin} Mnt)</span>
-                                        </div>
-                                        <span class="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgCepatPulangMin} Mnt/ASN</span>
-                                    </li>`).join('')}
+                                ${dash.top5CepatPulangSekolah.map((item, i) => `<li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row"><div class="truncate font-medium text-slate-700"><span>${i+1}. ${item.nama}</span><span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.cepatPulangMin} Mnt)</span></div><span class="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgCepatPulangMin} Mnt/ASN</span></li>`).join('')}
                             </ul>
                         </div>
                     </div>
                 </div>
 
                 <div class="mb-8">
-                    <h3 class="font-bold text-lg text-emerald-700 flex items-center mb-4">
-                        <i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Peringkat Kedisiplinan Sekolah Terbaik (Terendah Pelanggaran Rata-Rata per ASN)
-                    </h3>
+                    <h3 class="font-bold text-lg text-emerald-700 flex items-center mb-4"><i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Peringkat Kedisiplinan Terbaik (${labelPeriode})</h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-emerald-500">
-                            <div class="bg-emerald-50 p-3 font-semibold text-emerald-800 text-sm flex items-center justify-between">
-                                <span><i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Tanpa Ket. Terendah</span>
-                                <i class="fa-solid fa-shield-check text-emerald-600"></i>
-                            </div>
+                            <div class="bg-emerald-50 p-3 font-semibold text-emerald-800 text-sm flex items-center justify-between"><span><i class="fa-solid fa-shield-check text-emerald-600 mr-2"></i> Tanpa Ket. Terendah</span></div>
                             <ul class="p-2">
-                                ${best5AlpaSekolah.map((item, i) => `
-                                    <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <div class="truncate font-medium text-slate-700">
-                                            <span>${i+1}.${item.nama}</span>
-                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.tanpaKet} Hari)</span>
-                                        </div>
-                                        <span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTanpaKet} Hari/ASN</span>
-                                    </li>`).join('')}
+                                ${dash.best5AlpaSekolah.map((item, i) => `<li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row"><div class="truncate font-medium text-slate-700"><span>${i+1}. ${item.nama}</span></div><span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTanpaKet} Hari/ASN</span></li>`).join('')}
                             </ul>
                         </div>
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-teal-500">
-                            <div class="bg-teal-50 p-3 font-semibold text-teal-800 text-sm flex items-center justify-between">
-                                <span><i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Keterlambatan Terendah</span>
-                                <i class="fa-solid fa-user-clock text-teal-600"></i>
-                            </div>
+                            <div class="bg-teal-50 p-3 font-semibold text-teal-800 text-sm flex items-center justify-between"><span><i class="fa-solid fa-user-clock text-teal-600 mr-2"></i> Keterlambatan Terendah</span></div>
                             <ul class="p-2">
-                                ${best5TerlambatSekolah.map((item, i) => `
-                                    <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <div class="truncate font-medium text-slate-700">
-                                            <span>${i+1}.${item.nama}</span>
-                                            <span class="text-[10px] text-slate-400 block">${item.terlambatMin} Mnt)</span>
-                                        </div>
-                                        <span class="bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTerlambatMin} Mnt/ASN</span>
-                                    </li>`).join('')}
+                                ${dash.best5TerlambatSekolah.map((item, i) => `<li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row"><div class="truncate font-medium text-slate-700"><span>${i+1}. ${item.nama}</span></div><span class="bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgTerlambatMin} Mnt/ASN</span></li>`).join('')}
                             </ul>
                         </div>
                         <div class="glass-card p-0 overflow-hidden border-t-4 border-cyan-500">
-                            <div class="bg-cyan-50 p-3 font-semibold text-cyan-800 text-sm flex items-center justify-between">
-                                <span><i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Pulang Cepat Terendah</span>
-                                <i class="fa-solid fa-person-circle-check text-cyan-600"></i>
-                            </div>
+                            <div class="bg-cyan-50 p-3 font-semibold text-cyan-800 text-sm flex items-center justify-between"><span><i class="fa-solid fa-person-circle-check text-cyan-600 mr-2"></i> Pulang Cepat Terendah</span></div>
                             <ul class="p-2">
-                                ${best5CepatPulangSekolah.map((item, i) => `
-                                    <li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row">
-                                        <div class="truncate font-medium text-slate-700">
-                                            <span>${i+1}.${item.nama}</span>
-                                            <span class="text-[10px] text-slate-400 block">${item.totalASN} ASN (${item.cepatPulangMin} Mnt)</span>
-                                        </div>
-                                        <span class="bg-cyan-100 text-cyan-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgCepatPulangMin} Mnt/ASN</span>
-                                    </li>`).join('')}
+                                ${dash.best5CepatPulangSekolah.map((item, i) => `<li onclick="goToRekapAbsen('${item.id}')" class="flex justify-between items-center p-2.5 text-xs border-b last:border-0 border-slate-100 clickable-row"><div class="truncate font-medium text-slate-700"><span>${i+1}. ${item.nama}</span></div><span class="bg-cyan-100 text-cyan-700 font-bold px-2 py-0.5 rounded whitespace-nowrap">${item.avgCepatPulangMin} Mnt/ASN</span></li>`).join('')}
                             </ul>
                         </div>
                     </div>
@@ -726,14 +676,12 @@
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <div class="glass-card p-6 lg:col-span-2">
-                        <h3 class="font-bold text-slate-700 mb-4">Statistik Indisipliner per Sekolah</h3>
+                        <h3 class="font-bold text-slate-700 mb-4">Statistik Indisipliner per Sekolah (${labelPeriode})</h3>
                         <canvas id="barChart" style="max-height: 250px;"></canvas>
                     </div>
                     <div class="glass-card p-6 flex flex-col items-center">
-                        <h3 class="font-bold text-slate-700 mb-4 w-full text-left">Rasio Keseluruhan</h3>
-                        <div class="relative w-full" style="max-width: 250px;">
-                            <canvas id="pieChart"></canvas>
-                        </div>
+                        <h3 class="font-bold text-slate-700 mb-4 w-full text-left">Rasio Keseluruhan (${labelPeriode})</h3>
+                        <div class="relative w-full" style="max-width: 250px;"><canvas id="pieChart"></canvas></div>
                     </div>
                 </div>
             `;
@@ -748,11 +696,11 @@
                         currentChart = new Chart(ctxBar, {
                             type: 'bar',
                             data: {
-                                labels: schoolStats.map(s => s.nama || '-'),
+                                labels: dash.schoolStats.map(s => s.nama || '-'),
                                 datasets: [
-                                    { label: 'Keterlambatan (Mnt)', data: schoolStats.map(s => s.terlambatMin || 0), backgroundColor: '#f97316' },
-                                    { label: 'Cepat Pulang (Mnt)', data: schoolStats.map(s => s.cepatPulangMin || 0), backgroundColor: '#eab308' },
-                                    { label: 'Tanpa Ket. (Skala x60)', data: schoolStats.map(s => (s.tanpaKet || 0) * 60), backgroundColor: '#ef4444' }
+                                    { label: 'Keterlambatan (Mnt)', data: dash.schoolStats.map(s => s.terlambatMin || 0), backgroundColor: '#f97316' },
+                                    { label: 'Cepat Pulang (Mnt)', data: dash.schoolStats.map(s => s.cepatPulangMin || 0), backgroundColor: '#eab308' },
+                                    { label: 'Tanpa Ket. (Skala x60)', data: dash.schoolStats.map(s => (s.tanpaKet || 0) * 60), backgroundColor: '#ef4444' }
                                 ]
                             },
                             options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
@@ -761,8 +709,8 @@
 
                     if(ctxPie) {
                         if (currentPieChart) currentPieChart.destroy();
-                        let hasData = (totTerlambatMin + totCepatPulangMin + totIzinSakit + totTanpaKet) > 0;
-                        let pieData = hasData ? [totTerlambatMin, totCepatPulangMin, totIzinSakit, totTanpaKet] : [0,0,0,1];
+                        let hasData = (dash.totTerlambatMin + dash.totCepatPulangMin + dash.totIzinSakit + dash.totTanpaKet) > 0;
+                        let pieData = hasData ? [dash.totTerlambatMin, dash.totCepatPulangMin, dash.totIzinSakit, dash.totTanpaKet] : [0,0,0,1];
                         let pieColor = hasData ? ['#f97316', '#eab308', '#22c55e', '#ef4444'] : ['#e2e8f0','#e2e8f0','#e2e8f0','#e2e8f0'];
                         
                         currentPieChart = new Chart(ctxPie, {
