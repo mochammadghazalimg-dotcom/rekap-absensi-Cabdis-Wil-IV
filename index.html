@@ -99,59 +99,85 @@
         }
 
         window.onload = function() {
-            updateTime();
-            muatKalenderLiburOtomatis();
-            periksaBackupOtomatis();
+    updateTime();
+    muatKalenderLiburOtomatis();
 
-            const contentArea = document.getElementById('content-area');
-            if (contentArea) {
-                contentArea.innerHTML = '<div class="text-center mt-20 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-blue-600"></i><br>Menghubungkan ke Database...</div>';
-            }
+    const contentArea = document.getElementById('content-area');
+    if (contentArea) {
+        contentArea.innerHTML = '<div class="text-center mt-20 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-blue-600"></i><br>Menghubungkan ke Database...</div>';
+    }
 
-            if (typeof google !== 'undefined' && google.script && google.script.run) {
-                google.script.run
-                    .withSuccessHandler(function(db) {
-                        if (db) {
-                            if (db.sekolah && db.sekolah.length > 0) dummySekolah = db.sekolah;
-                            if (db.absensi && db.absensi.length > 0) dummyAbsensi = db.absensi;
-                            if (db.pegawai && db.pegawai.length > 0) dummyPegawai = db.pegawai;
-                            if (db.logHarian && db.logHarian.length > 0) dummyLogHarian = db.logHarian;
-                            if (db.arsip && db.arsip.length > 0) dummyArsip = db.arsip; 
-                        }
-                        switchView('dashboard');
-                    })
-                    .withFailureHandler(function(err) {
-                        console.warn("Gagal load DB:", err);
-                        switchView('dashboard');
-                    })
-                    .ambilSemuaDataFromSheet();
-            } else {
-                switchView('dashboard');
-            }
-        };
-
-        function periksaBackupOtomatis() {
-            let tglHariIni = new Date().getDate();
-            if (tglHariIni >= 1 && tglHariIni <= 3) {
-                if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    let now = new Date();
-                    let targetBulan = now.getMonth(); 
-                    let targetTahun = now.getFullYear();
-                    if (targetBulan === 0) { targetBulan = 12; targetTahun -= 1; }
-                    
-                    let snapshotObj = getDashboardData(targetBulan, targetTahun, true);
-                    let snapshotJSON = JSON.stringify(snapshotObj);
-
-                    google.script.run
-                        .withSuccessHandler(function(res) {
-                            if (res.status === 'success') {
-                                Swal.fire({ icon: 'success', title: 'Sistem Teroptimasi', html: '<b style="color:#166534">Data BERHASIL dibackup ke Arsip.</b>', background: '#dcfce7' });
-                            }
-                        })
-                        .prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun);
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(db) {
+                if (db) {
+                    if (db.sekolah && db.sekolah.length > 0) dummySekolah = db.sekolah;
+                    if (db.absensi && db.absensi.length > 0) dummyAbsensi = db.absensi;
+                    if (db.pegawai && db.pegawai.length > 0) dummyPegawai = db.pegawai;
+                    if (db.logHarian && db.logHarian.length > 0) dummyLogHarian = db.logHarian;
+                    if (db.arsip && db.arsip.length > 0) dummyArsip = db.arsip; 
                 }
-            }
+                switchView('dashboard');
+                // Panggil periksaBackupOtomatis SETELAH data database dimuat!
+                periksaBackupOtomatis();
+            })
+            .withFailureHandler(function(err) {
+                console.warn("Gagal load DB:", err);
+                switchView('dashboard');
+            })
+            .ambilSemuaDataFromSheet();
+    } else {
+        switchView('dashboard');
+    }
+};
+
+function periksaBackupOtomatis() {
+    let now = new Date();
+    let tglHariIni = now.getDate();
+
+    // Hanya berjalan otomatis pada tanggal 1 s/d 3 di awal bulan berjalan
+    if (tglHariIni >= 1 && tglHariIni <= 3) {
+        let targetBulan = now.getMonth(); 
+        let targetTahun = now.getFullYear();
+        if (targetBulan === 0) { targetBulan = 12; targetTahun -= 1; }
+
+        // KUNCI NOTIFIKASI: Jika admin sudah pernah mengonfirmasi/melihat di bulan berjalan, hentikan (notif tidak muncul lagi)
+        let notifKey = `backup_notif_seen_${targetTahun}_${targetBulan}`;
+        if (localStorage.getItem(notifKey) === 'true') {
+            return;
         }
+
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+            let snapshotObj = getDashboardData(targetBulan, targetTahun, true);
+            let snapshotJSON = JSON.stringify(snapshotObj);
+
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res.status === 'success') {
+                        localStorage.setItem(notifKey, 'true'); // Tandai notif sudah muncul 1x
+                        Swal.fire({ 
+                            icon: 'success', 
+                            title: 'Backup & Snapshot Otomatis Berhasil', 
+                            html: '<b style="color:#166534">Data absensi bulan lalu berhasil dibackup dan Snapshot Dashboard terkunci.</b>', 
+                            background: '#dcfce7',
+                            confirmButtonText: 'Oke, Mengerti'
+                        });
+                    } else if (res.status === 'already_backed_up') {
+                        localStorage.setItem(notifKey, 'true'); // Jika sudah ter-backup, simpan status agar tidak muncul notif lagi
+                    } else if (res.status === 'fail') {
+                        localStorage.setItem(notifKey, 'true');
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Proses Backup Gagal',
+                            text: res.message || 'Terjadi kesalahan saat memproses backup data SILAKAN DI CEK DATABASE DAN LAKUKAN BAKCUP MANUAL.',
+                            confirmButtonText: 'Oke'
+                        });
+                    }
+                })
+                .prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun);
+        }
+    }
+}
 
         function backupManual() {
             Swal.fire({
@@ -565,150 +591,182 @@
         }
 
         function tampilkanKartuASN(asnJsonEncoded) {
-            let asn = JSON.parse(decodeURIComponent(asnJsonEncoded));
+    let asn = JSON.parse(decodeURIComponent(asnJsonEncoded));
 
-            const now = new Date();
-            const bulanNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-            const currentBulan = bulanNames[now.getMonth()];
-            const currentTahun = now.getFullYear();
-            const periodeTeks = `${currentBulan} ${currentTahun}`;
-            const lastDayObj = new Date(currentTahun, now.getMonth() + 1, 0);
-            const lastDayDate = lastDayObj.getDate();
-            const ttdTanggal = `Wajo, ${lastDayDate} ${currentBulan} ${currentTahun}`;
+    // ACCESSS FILTER BULAN & TAHUN AKTIF DARI DASHBOARD
+    const filterBulanEl = document.getElementById('filterBulanDashboard');
+    const filterTahunEl = document.getElementById('filterTahunDashboard');
+    
+    let now = new Date();
+    let currentBulanIndex = filterBulanEl ? (parseInt(filterBulanEl.value) - 1) : now.getMonth();
+    let currentTahun = filterTahunEl ? parseInt(filterTahunEl.value) : now.getFullYear();
 
-            const logoSulsel = "https://i.imgur.com/N8da60H.png";
+    const bulanNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const namaBulanPenilaian = bulanNames[currentBulanIndex];
+    const periodeTeks = `${namaBulanPenilaian} ${currentTahun}`;
+    
+    // Tanggal TTD Akhir Bulan Sesuai Filter
+    const lastDayObj = new Date(currentTahun, currentBulanIndex + 1, 0);
+    const lastDayDate = lastDayObj.getDate();
+    const ttdTanggal = `Wajo, ${lastDayDate} ${namaBulanPenilaian} ${currentTahun}`;
 
-            Swal.fire({
-                html: `
-                    <div id="kartuSertifikatASN" style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); padding: 32px; border-radius: 24px; color: white; position: relative; overflow: hidden; border: 2px solid #fbbf24; width: 800px; max-width: 100%; margin: 0 auto; text-align: left; font-family: Arial, sans-serif; box-sizing: border-box;">
-                
-                          <div style="position: absolute; top: -80px; right: -80px; width: 240px; height: 240px; background: rgba(245, 158, 11, 0.1); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
-                          <div style="position: absolute; bottom: -80px; left: -80px; width: 240px; height: 240px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
+    const logoSulsel = "https://i.imgur.com/N8da60H.png";
 
-                          <table style="width: 100%; margin-bottom: 20px; border-bottom: 1px solid rgba(251, 191, 36, 0.3); padding-bottom: 15px; position: relative; z-index: 10;">
-                              <tr>
-                                  <td style="width: 60px; padding-right: 15px;">
-                                      <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.1); border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.4); text-align: center; line-height: 56px;">
-                                          <img src="${logoSulsel}" alt="Logo Sulsel" crossorigin="anonymous" style="max-height: 44px; display: inline-block; vertical-align: middle;" />
-                                      </div>
-                                  </td>
-                                  <td>
-                                      <h4 style="color: #fbbf24; font-weight: 900; font-size: 16px; text-transform: uppercase; margin: 0;">CABANG DINAS PENDIDIKAN WIL. IV</h4>
-                                      <p style="color: #cbd5e1; font-weight: 500; font-size: 12px; margin: 4px 0 0 0;">Absensi Satuan Pendidikan Cabang Dinas Pendidikan Wil. IV</p>
-                                  </td>
-                              </tr>
-                          </table>
+    Swal.fire({
+        html: `
+            <div id="kartuSertifikatASN" style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); padding: 32px; border-radius: 24px; color: white; position: relative; overflow: hidden; border: 2px solid #fbbf24; width: 800px; max-width: 100%; margin: 0 auto; text-align: left; font-family: Arial, sans-serif; box-sizing: border-box;">
+        
+                  <div style="position: absolute; top: -80px; right: -80px; width: 240px; height: 240px; background: rgba(245, 158, 11, 0.1); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
+                  <div style="position: absolute; bottom: -80px; left: -80px; width: 240px; height: 240px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; filter: blur(40px); pointer-events: none;"></div>
 
-                          <div style="text-align: center; margin: 10px 0; position: relative; z-index: 10;">
-                              <span style="display: inline-block; background: linear-gradient(to right, #f59e0b, #facc15, #f59e0b); color: #020617; font-weight: 900; font-size: 12px; text-transform: uppercase; padding: 6px 20px; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #fcd34d;">
-                                  &#9733; ASN TELADAN PRESENSI
-                              </span>
-                              <p style="color: #fde047; font-weight: 600; font-size: 12px; margin: 10px 0 0 0;">Periode Penilaian: ${periodeTeks}</p>
-                          </div>
+                  <table style="width: 100%; margin-bottom: 20px; border-bottom: 1px solid rgba(251, 191, 36, 0.3); padding-bottom: 15px; position: relative; z-index: 10;">
+                      <tr>
+                          <td style="width: 60px; padding-right: 15px;">
+                              <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.1); border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.4); text-align: center; line-height: 56px;">
+                                  <img src="${logoSulsel}" alt="Logo Sulsel" crossorigin="anonymous" style="max-height: 44px; display: inline-block; vertical-align: middle;" />
+                              </div>
+                          </td>
+                          <td>
+                              <h4 style="color: #fbbf24; font-weight: 900; font-size: 16px; text-transform: uppercase; margin: 0;">CABANG DINAS PENDIDIKAN WIL. IV</h4>
+                              <p style="color: #cbd5e1; font-weight: 500; font-size: 12px; margin: 4px 0 0 0;">Absensi Satuan Pendidikan Cabang Dinas Pendidikan Wil. IV</p>
+                          </td>
+                      </tr>
+                  </table>
 
-                          <div style="text-align: center; margin: 20px 0; position: relative; z-index: 10;">
-                              <h3 style="font-size: 24px; font-weight: 900; color: #ffffff; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">${asn.nama || 'ASN'}</h3>
-                              <p style="font-size: 14px; color: #fde047; font-family: monospace; margin: 5px 0;">NIP: ${asn.nip}</p>
-                              <div style="margin-top: 10px;">
-                              <span style="display: inline-block; font-size: 12px; color: #e2e8f0; font-weight: 600; background: rgba(30, 58, 138, 0.6); padding: 6px 16px; border-radius: 12px; border: 1px solid rgba(29, 78, 216, 0.5);">
-                                  &#127979; ${asn.sekolah || 'Instansi'}
-                              </span>
-                          </div>
-                      </div>
-
-                      <table style="width: 70%; margin: 20px auto; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 16px; position: relative; z-index: 10; text-align: center; border-collapse: collapse;">
-                          <tr>
-                              <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
-                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Kehadiran</p>
-                                  <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.hadir || 0} Hari</p>
-                              </td>
-                              <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
-                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Terlambat</p>
-                                  <p style="font-weight: 900; color: #fbbf24; font-size: 16px; margin: 5px 0 0 0;">${asn.terlambatMin || 0} Mnt</p>
-                              </td>
-                              <td style="padding: 15px; width: 33%;">
-                                  <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Tanpa Ket.</p>
-                                  <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.tanpaKet || 0} Hari</p>
-                              </td>
-                          </tr>
-                      </table>
-
-                      <table style="width: 100%; margin-top: 25px; border-top: 1px solid #1e293b; padding-top: 15px; position: relative; z-index: 10;">
-                          <tr>
-                              <td style="vertical-align: bottom; width: 50%;">
-                                  <p style="color: #fbbf24; font-weight: 700; font-size: 12px; margin: 0;">Cabdin Wilayah IV Wajo-Sidrap</p>
-                                  <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Sistem Presensi &amp; Indisipliner Terpadu</p>
-                              </td>
-                              <td style="text-align: right; vertical-align: bottom; width: 50%;">
-                                  <p style="color: #cbd5e1; font-size: 12px; font-weight: 600; margin: 0 0 2px 0;">${ttdTanggal}</p>
-                                  <p style="color: #ffffff; font-size: 12px; font-weight: 700; margin: 0 0 10px 0;">Kepala Cabang Dinas Pendidikan Wil. IV</p>
-                            
-                                  <div style="display: inline-block; background: #ffffff; border-radius: 12px; padding: 8px; border: 1px solid #cbd5e1; text-align: left; margin-bottom: 10px;">
-                                      <table style="border-collapse: collapse;">
-                                          <tr>
-                                              <td style="padding-right: 8px;">
-                                                  <img src="${logoSulsel}" crossorigin="anonymous" style="height: 32px; display: block;" />
-                                              </td>
-                                              <td>
-                                                  <p style="font-size: 9px; color: #1e3a8a; font-weight: 900; margin: 0; line-height: 1.2;">Pemerintah Provinsi</p>
-                                                  <p style="font-size: 10px; color: #0f172a; font-weight: 900; margin: 0; line-height: 1.2;">Sulawesi Selatan</p>
-                                                  <p style="font-size: 7px; color: #64748b; margin: 2px 0 0 0;">Dokumen ini ditandatangani secara digital</p>
-                                              </td>
-                                          </tr>
-                                      </table>
-                                  </div>
-
-                                  <p style="color: #fde047; font-size: 12px; font-weight: 900; margin: 0;">DR. H. SETTARAMING, S.Pd., M.Si</p>
-                                  <p style="color: #cbd5e1; font-size: 11px; font-family: monospace; margin: 2px 0 0 0;">NIP. 197204031998011001</p>
-                              </td>
-                          </tr>
-                      </table>
+                  <div style="text-align: center; margin: 10px 0; position: relative; z-index: 10;">
+                      <span style="display: inline-block; background: linear-gradient(to right, #f59e0b, #facc15, #f59e0b); color: #020617; font-weight: 900; font-size: 12px; text-transform: uppercase; padding: 6px 20px; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #fcd34d;">
+                          &#9733; ASN TELADAN PRESENSI
+                      </span>
+                      <p style="color: #fde047; font-weight: 600; font-size: 12px; margin: 10px 0 0 0;">Periode Penilaian: ${periodeTeks}</p>
                   </div>
-              `,
-              showCancelButton: true,
-              confirmButtonText: '<i class="fa-solid fa-print mr-1"></i> Cetak / Simpan PDF',
-              cancelButtonText: 'Tutup',
-              confirmButtonColor: '#f59e0b',
-              width: '860px',
-              customClass: { popup: 'p-2 rounded-3xl bg-transparent shadow-none' }
-          }).then((result) => {
-              if (result.isConfirmed) {
-                  let printContent = document.getElementById('kartuSertifikatASN').outerHTML;
-                  let iframe = document.createElement('iframe');
-                  iframe.style.display = 'none';
-                  document.body.appendChild(iframe);
-                  
-                  iframe.contentWindow.document.open();
-                  iframe.contentWindow.document.write(`
-                      <html>
-                      <head>
-                          <title>Sertifikat Presensi - ${asn.nama}</title>
-                          <style>
-                              @media print {
-                                  @page { size: A4 landscape; margin: 0; }
-                                  body { 
-                                      -webkit-print-color-adjust: exact !important; 
-                                      print-color-adjust: exact !important; 
-                                      margin: auto; display: flex; justify-content: center; align-items: center; 
-                                      min-height: 150vh; background-color: #0f172a; 
-                                  }
-                                  #kartuSertifikatASN { transform: scale(1.1); margin: auto; }
-                              }
-                          </style>
-                      </head>
-                      <body>${printContent}</body>
-                      </html>
-                  `);
-                  iframe.contentWindow.document.close();
-                  
-                  setTimeout(() => {
-                      iframe.contentWindow.focus();
-                      iframe.contentWindow.print();
-                      setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-                  }, 1000);
-              }
-          });
+
+                  <div style="text-align: center; margin: 20px 0; position: relative; z-index: 10;">
+                      <h3 style="font-size: 24px; font-weight: 900; color: #ffffff; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">${asn.nama || 'ASN'}</h3>
+                      <p style="font-size: 14px; color: #fde047; font-family: monospace; margin: 5px 0;">NIP: ${asn.nip}</p>
+                      <div style="margin-top: 10px;">
+                      <span style="display: inline-block; font-size: 12px; color: #e2e8f0; font-weight: 600; background: rgba(30, 58, 138, 0.6); padding: 6px 16px; border-radius: 12px; border: 1px solid rgba(29, 78, 216, 0.5);">
+                          &#127979; ${asn.sekolah || 'Instansi'}
+                      </span>
+                  </div>
+              </div>
+
+              <table style="width: 70%; margin: 20px auto; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 16px; position: relative; z-index: 10; text-align: center; border-collapse: collapse;">
+                  <tr>
+                      <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
+                          <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Kehadiran</p>
+                          <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.hadir || 0} Hari</p>
+                      </td>
+                      <td style="padding: 15px; border-right: 1px solid rgba(51, 65, 85, 0.8); width: 33%;">
+                          <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Terlambat</p>
+                          <p style="font-weight: 900; color: #fbbf24; font-size: 16px; margin: 5px 0 0 0;">${asn.terlambatMin || 0} Mnt</p>
+                      </td>
+                      <td style="padding: 15px; width: 33%;">
+                          <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin: 0;">Tanpa Ket.</p>
+                          <p style="font-weight: 900; color: #34d399; font-size: 16px; margin: 5px 0 0 0;">${asn.tanpaKet || 0} Hari</p>
+                      </td>
+                  </tr>
+              </table>
+
+              <table style="width: 100%; margin-top: 25px; border-top: 1px solid #1e293b; padding-top: 15px; position: relative; z-index: 10;">
+                  <tr>
+                      <td style="vertical-align: bottom; width: 50%;">
+                          <p style="color: #fbbf24; font-weight: 700; font-size: 12px; margin: 0;">Cabdin Wilayah IV Wajo-Sidrap</p>
+                          <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Sistem Presensi &amp; Indisipliner Terpadu</p>
+                      </td>
+                      <td style="text-align: right; vertical-align: bottom; width: 50%;">
+                          <p style="color: #cbd5e1; font-size: 12px; font-weight: 600; margin: 0 0 2px 0;">${ttdTanggal}</p>
+                          <p style="color: #ffffff; font-size: 12px; font-weight: 700; margin: 0 0 10px 0;">Kepala Cabang Dinas Pendidikan Wil. IV</p>
+                    
+                          <div style="display: inline-block; background: #ffffff; border-radius: 12px; padding: 8px; border: 1px solid #cbd5e1; text-align: left; margin-bottom: 10px;">
+                              <table style="border-collapse: collapse;">
+                                  <tr>
+                                      <td style="padding-right: 8px;">
+                                          <img src="${logoSulsel}" crossorigin="anonymous" style="height: 32px; display: block;" />
+                                      </td>
+                                      <td>
+                                          <p style="font-size: 9px; color: #1e3a8a; font-weight: 900; margin: 0; line-height: 1.2;">Pemerintah Provinsi</p>
+                                          <p style="font-size: 10px; color: #0f172a; font-weight: 900; margin: 0; line-height: 1.2;">Sulawesi Selatan</p>
+                                          <p style="font-size: 7px; color: #64748b; margin: 2px 0 0 0;">Dokumen ini ditandatangani secara digital</p>
+                                      </td>
+                                  </tr>
+                              </table>
+                          </div>
+
+                          <p style="color: #fde047; font-size: 12px; font-weight: 900; margin: 0;">DR. H. SETTARAMING, S.Pd., M.Si</p>
+                          <p style="color: #cbd5e1; font-size: 11px; font-family: monospace; margin: 2px 0 0 0;">NIP. 197204031998011001</p>
+                      </td>
+                  </tr>
+              </table>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="fa-solid fa-print mr-1"></i> Cetak / Simpan PDF',
+        cancelButtonText: 'Tutup',
+        confirmButtonColor: '#f59e0b',
+        width: '860px',
+        customClass: { popup: 'p-2 rounded-3xl bg-transparent shadow-none' }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            let printContent = document.getElementById('kartuSertifikatASN').outerHTML;
+            let iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+            
+            iframe.contentWindow.document.open();
+            iframe.contentWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Sertifikat Presensi - ${asn.nama}</title>
+                    <style>
+                        @page { 
+                            size: A4 landscape; 
+                            margin: 1cm; 
+                        }
+                        * { 
+                            box-sizing: border-box !important; 
+                            -webkit-print-color-adjust: exact !important; 
+                            print-color-adjust: exact !important; 
+                        }
+                        html, body { 
+                            width: 100%; 
+                            height: 100%; 
+                            margin: 0; 
+                            padding: 0; 
+                            background-color: #0f172a !important; 
+                            display: flex; 
+                            justify-content: center; 
+                            align-items: center; 
+                        }
+                        #kartuSertifikatASN { 
+                            width: 100% !important; 
+                            max-width: 960px !important; 
+                            margin: auto !important; 
+                            transform: scale(0.95);
+                            transform-origin: center center;
+                            page-break-inside: avoid !important;
+                            break-inside: avoid !important;
+                        }
+                    </style>
+                </head>
+                <body>${printContent}</body>
+                </html>
+            `);
+            iframe.contentWindow.document.close();
+            
+            setTimeout(() => {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+            }, 500);
         }
+    });
+}
 
         function renderDataSekolah(container) {
             if(!container) return;
