@@ -30,8 +30,8 @@
             <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center mb-2 drop-shadow-md">
                 <i class="fa-solid fa-building-flag text-2xl text-blue-600"></i>
             </div>
-            <h1 class="text-lg font-bold tracking-wider uppercase text-blue-400">Cabdin Wil. IV</h1>
-            <p class="text-xs text-slate-400">Absensi Satuan Pendidikan</p>
+            <h1 class="text-lg font-bold tracking-wider uppercase text-blue-400">Cabdis Wil. IV</h1>
+            <p class="text-xs text-slate-400">Rekap Absensi Satuan Pendidikan</p>
         </div>
         <nav class="flex-1 mt-6">
             <ul class="space-y-1">
@@ -1024,37 +1024,45 @@ function periksaBackupOtomatis() {
         }
 
         function renderTabelPegawai() {
-            const filterVal = document.getElementById('filterSekolahPegawai') ? document.getElementById('filterSekolahPegawai').value : "ALL";
-            const tbody = document.getElementById('bodyPegawai');
-            if(!tbody) return;
+    const filterVal = document.getElementById('filterSekolahPegawai') ? document.getElementById('filterSekolahPegawai').value : "ALL";
+    const tbody = document.getElementById('bodyPegawai');
+    if(!tbody) return;
 
-            let filtered = dummyPegawai;
-            if (filterVal !== "ALL") {
-                filtered = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(filterVal.toUpperCase()));
-            }
+    let filtered = dummyPegawai;
+    if (filterVal !== "ALL") {
+        filtered = dummyPegawai.filter(p => (p.sekolah || '').toUpperCase().includes(filterVal.toUpperCase()));
+    }
 
-            if(filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 text-sm">Belum ada data pegawai. Silakan unggah CSV Data Pegawai.</td></tr>`;
-                return;
-            }
+    if(filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 text-sm">Belum ada data pegawai. Silakan unggah CSV Data Pegawai.</td></tr>`;
+        return;
+    }
 
-            tbody.innerHTML = filtered.map((p, i) => `
-                <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
-                    <td class="p-3 text-center text-slate-500">${i+1}</td>
-                    <td class="p-3 font-semibold text-slate-800">${p.nip}</td>
-                    <td class="p-3 font-semibold text-blue-950">${p.nama}</td>
-                    <td class="p-3 text-slate-600">${p.sekolah || '-'}</td>
-                    <td class="p-3 text-center">
-                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
-                            ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'Tersedia' : 'Belum Ada'}
-                        </span>
-                    </td>
-                    <td class="p-3 text-center">
-                        <button onclick="editPegawai('${p.nip}')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs"><i class="fa-solid fa-pen"></i> Edit</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
+    tbody.innerHTML = filtered.map((p, i) => `
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
+            <td class="p-3 text-center text-slate-500">${i+1}</td>
+            <td class="p-3 font-semibold text-slate-800">${p.nip}</td>
+            <td class="p-3 font-semibold text-blue-950">${p.nama}</td>
+            <td class="p-3 text-slate-600">${p.sekolah || '-'}</td>
+            <td class="p-3 text-center">
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+                    ${p.photo_uploaded === 'True' || p.photo_uploaded === true || p.photo_uploaded === 'true' ? 'Tersedia' : 'Belum Ada'}
+                </span>
+            </td>
+            <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                    <!-- Tombol Edit & Hapus Ditumpuk Atas-Bawah (Ikon Saja) -->
+                    <div class="flex flex-col gap-1">
+                        <button onclick="editPegawai('${p.nip}')" title="Edit Data ASN" class="bg-yellow-500 hover:bg-yellow-600 text-white p-1.5 rounded text-xs flex items-center justify-center transition-all shadow-sm"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="hapusPegawai('${p.nip}')" title="Hapus Data ASN" class="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded text-xs flex items-center justify-center transition-all shadow-sm"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <!-- Tombol Mutasi Di Samping Kanan -->
+                    <button onclick="mutasiPegawai('${p.nip}')" title="Mutasi Sekolah" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-3 rounded text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"><i class="fa-solid fa-right-left"></i> Mutasi</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
 
         function editPegawai(nip) {
             let p = dummyPegawai.find(x => String(x.nip) === String(nip));
@@ -1098,6 +1106,183 @@ function periksaBackupOtomatis() {
                 }
             });
         }
+
+        function hapusPegawai(nip) {
+    let p = dummyPegawai.find(x => String(x.nip).trim() === String(nip).trim());
+    if(!p) return;
+
+    Swal.fire({
+        title: 'Hapus Data ASN?',
+        html: `Apakah Anda yakin ingin menghapus <b>${p.nama}</b> (NIP: ${p.nip}) dari Master Data Pegawai?<br><br><span class="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200 block"><i class="fa-solid fa-triangle-exclamation"></i> Gunakan ini untuk ASN yang <b>Pensiun</b> atau <b>Mutasi Keluar Wilayah Cabdin Wil. IV</b>.</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '<i class="fa-solid fa-trash mr-1"></i> Ya, Hapus ASN',
+        cancelButtonText: 'Batal'
+    }).then((res) => {
+        if(res.isConfirmed) {
+            dummyPegawai = dummyPegawai.filter(x => String(x.nip).trim() !== String(nip).trim());
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+            }
+            renderDataPegawai(document.getElementById('content-area'));
+            
+            // POP-UP NOTIFIKASI DENGAN ANIMASI DOKUMEN MASUK TEMPAT SAMPAH
+            Swal.fire({
+                html: `
+                    <div style="padding: 10px 0;">
+                        <div style="position: relative; width: 80px; height: 80px; margin: 0 auto 15px auto;">
+                            <style>
+                                @keyframes dropTrash {
+                                    0% { transform: translateY(-35px) scale(1) rotate(0deg); opacity: 1; }
+                                    60% { transform: translateY(15px) scale(0.5) rotate(180deg); opacity: 0.9; }
+                                    100% { transform: translateY(30px) scale(0.1) rotate(360deg); opacity: 0; }
+                                }
+                                @keyframes shakeBin {
+                                    0%, 50% { transform: scale(1) rotate(0deg); }
+                                    65% { transform: scale(1.15) rotate(-8deg); }
+                                    75% { transform: scale(1.15) rotate(8deg); }
+                                    85% { transform: scale(1.05) rotate(-3deg); }
+                                    100% { transform: scale(1) rotate(0deg); }
+                                }
+                                .animated-paper {
+                                    position: absolute;
+                                    top: 0;
+                                    left: 28px;
+                                    color: #ef4444;
+                                    font-size: 24px;
+                                    animation: dropTrash 0.9s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+                                }
+                                .animated-bin {
+                                    position: absolute;
+                                    bottom: 0;
+                                    left: 18px;
+                                    color: #dc2626;
+                                    font-size: 48px;
+                                    animation: shakeBin 0.9s ease-in-out forwards;
+                                }
+                            </style>
+                            <i class="fa-solid fa-file-user animated-paper"></i>
+                            <i class="fa-solid fa-trash-can animated-bin"></i>
+                        </div>
+                        <h3 style="font-size: 18px; font-weight: 800; color: #1e293b; margin-bottom: 6px;">Data ASN Berhasil Dihapus!</h3>
+                        <p style="font-size: 13px; color: #64748b; margin: 0;">Data <b>${p.nama}</b> telah resmi dikeluarkan dari database.</p>
+                    </div>
+                `,
+                showConfirmButton: true,
+                confirmButtonText: 'Selesai',
+                confirmButtonColor: '#ef4444',
+                customClass: { popup: 'rounded-2xl' }
+            });
+        }
+    });
+}
+
+        function mutasiPegawai(nip) {
+    let p = dummyPegawai.find(x => String(x.nip).trim() === String(nip).trim());
+    if(!p) return;
+
+    // Buat Opsi Sekolah Tujuan (Kecuali sekolah asal)
+    let opsiSekolah = dummySekolah
+        .filter(s => s.nama.toUpperCase() !== (p.sekolah || '').toUpperCase())
+        .map(s => `<option value="${s.nama}" data-id="${s.id}">${s.nama}</option>`)
+        .join('');
+
+    let tglHariIni = new Date().toISOString().split('T')[0];
+
+    Swal.fire({
+        title: 'Form Mutasi ASN',
+        html: `
+            <div class="flex flex-col gap-3 mt-2 text-left text-xs text-slate-700">
+                <div class="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                    <p class="font-bold text-purple-900">${p.nama}</p>
+                    <p class="text-slate-500 font-mono">NIP: ${p.nip}</p>
+                    <p class="text-slate-600 mt-1">Sekolah Saat Ini: <b class="text-slate-800">${p.sekolah || '-'}</b></p>
+                </div>
+                
+                <div>
+                    <label class="block font-semibold mb-1 text-slate-600">Pilih Sekolah Tujuan Mutasi:</label>
+                    <select id="swal-mutasi-sekolah" class="w-full p-2 border rounded font-semibold text-sm bg-slate-50">
+                        <option value="">-- Pilih Sekolah Tujuan --</option>
+                        ${opsiSekolah}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-semibold mb-1 text-slate-600">Tanggal Efektif Mutasi:</label>
+                    <input type="date" id="swal-mutasi-tanggal" value="${tglHariIni}" class="w-full p-2 border rounded font-semibold text-sm bg-slate-50">
+                    <p class="text-[11px] text-amber-600 mt-1"><i class="fa-solid fa-circle-info"></i> Absensi <b>sebelum</b> tanggal ini tetap tercatat di <b>${p.sekolah}</b>. Absensi <b>mulai</b> tanggal ini tercatat di sekolah baru.</p>
+                </div>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="fa-solid fa-check mr-1"></i> Proses Mutasi',
+        confirmButtonColor: '#9333ea',
+        cancelButtonText: 'Batal',
+        preConfirm: () => {
+            const sekolahTujuan = document.getElementById('swal-mutasi-sekolah').value;
+            const tglMutasi = document.getElementById('swal-mutasi-tanggal').value;
+            if (!sekolahTujuan) {
+                Swal.showValidationMessage('Silakan pilih sekolah tujuan mutasi!');
+                return false;
+            }
+            if (!tglMutasi) {
+                Swal.showValidationMessage('Silakan tentukan tanggal efektif mutasi!');
+                return false;
+            }
+            return { sekolahTujuan, tglMutasi };
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            let sekolahLama = p.sekolah;
+            let sekolahBaru = result.value.sekolahTujuan;
+            let tglMutasiObj = new Date(result.value.tglMutasi);
+            tglMutasiObj.setHours(0,0,0,0);
+
+            // 1. UPDATE MASTER DATA PEGAWAI DENGAN SEKOLAH BARU
+            p.sekolah = sekolahBaru;
+
+            // 2. DISIPLIN LOG HARIAN: PERBARUI SEKOLAH HANYA UNTUK TANGGAL >= TANGGAL MUTASI
+            let matchSekolahBaru = dummySekolah.find(s => s.nama.toUpperCase().includes(sekolahBaru.toUpperCase()));
+            let idSekolahBaru = matchSekolahBaru ? matchSekolahBaru.id : "ALL";
+
+            let pNipClean = String(p.nip).replace(/['\s]/g, '');
+
+            dummyLogHarian.forEach(log => {
+                let logNipClean = String(log.nip || '').replace(/['\s]/g, '');
+                if (logNipClean === pNipClean) {
+                    let lYear = (parseInt(log.yyyy) < 100 ? parseInt(log.yyyy) + 2000 : parseInt(log.yyyy));
+                    let logDate = new Date(lYear, parseInt(log.mm) - 1, parseInt(log.dd));
+                    logDate.setHours(0,0,0,0);
+
+                    // Jika tanggal log sama dengan atau setelah tanggal mutasi -> Ubah ke Sekolah Baru
+                    if (logDate >= tglMutasiObj) {
+                        log.sekolah = sekolahBaru;
+                        log.sekolahId = idSekolahBaru;
+                    }
+                    // Jika tanggal log sebelum tanggal mutasi -> TETAP Sekolah Lama (Tidak Diubah!)
+                }
+            });
+
+            // 3. SINKRONKAN DATABASE GOOGLE SHEETS
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+                google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
+            }
+
+            // 4. REFRESH TAMPILAN
+            renderDataPegawai(document.getElementById('content-area'));
+            
+            Swal.fire({
+                icon: 'success',
+                title: 'Mutasi Berhasil!',
+                html: `ASN <b>${p.nama}</b> resmi dimutasi dari <b>${sekolahLama}</b> ke <b>${sekolahBaru}</b> terhitung tanggal <b>${result.value.tglMutasi}</b>.`,
+                confirmButtonColor: '#9333ea'
+            });
+        }
+    });
+}
 
         function prosesUploadPegawaiCSV(event) {
             const file = event.target.files[0];
@@ -1541,14 +1726,14 @@ function periksaBackupOtomatis() {
                                     let totalDatangMnt = (jamD * 60) + mntD;
                                     let batasMasukMnt = (8 * 60);
                                     terlambatBaru = totalDatangMnt > batasMasukMnt ? totalDatangMnt - batasMasukMnt : 0;
-                                } else { terlambatBaru = 480; }
+                                } else { terlambatBaru = 240; }
                                 
                                 if (record.pulang !== null) {
                                     let [jamP, mntP] = record.pulang.split(':').map(Number);
                                     let totalPulangMnt = (jamP * 60) + mntP;
                                     let batasPulangMnt = (16 * 60);
                                     cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
-                                } else { cptPulangBaru = 480; }
+                                } else { cptPulangBaru = 120; }
                             }
 
                             let tglObj = parseTanggalLog(record.tanggal);
