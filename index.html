@@ -40,6 +40,7 @@
                 <li><a onclick="switchView('dataSekolah')" id="nav-dataSekolah" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-school w-6 text-center mr-3"></i> Data Sekolah</a></li>
                 <li><a onclick="switchView('rekapAbsen')" id="nav-rekapAbsen" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-calendar-check w-6 text-center mr-3"></i> Rekap Absen</a></li>
                 <li><a onclick="switchView('laporanIndisipliner')" id="nav-laporanIndisipliner" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-user-xmark w-6 text-center mr-3"></i> Lap. Indisipliner</a></li>
+                <li><a onclick="switchView('editAbsensi')" id="nav-editAbsensi" class="sidebar-link flex items-center py-3 px-6 text-sm font-medium"><i class="fa-solid fa-pen-to-square w-6 text-center mr-3"></i> Edit Absensi</a></li>
             </ul>
         </nav>
         <div class="p-4 border-t border-slate-700 flex items-center gap-3">
@@ -248,6 +249,7 @@ function periksaBackupOtomatis() {
             else if (viewId === 'dataSekolah') { pageTitle.innerText = "Data Sekolah"; renderDataSekolah(contentArea); }
             else if (viewId === 'rekapAbsen') { pageTitle.innerText = "Rekap Absen Sekolah"; renderRekapAbsen(contentArea); }
             else if (viewId === 'laporanIndisipliner') { pageTitle.innerText = "Laporan Indisipliner"; renderLaporan(contentArea); }
+            else if (viewId === 'editAbsensi') { pageTitle.innerText = "Edit Absensi ASN"; renderEditAbsensi(contentArea); }
         }
 
         function goToRekapAbsen(sekolahId) {
@@ -1642,168 +1644,199 @@ function periksaBackupOtomatis() {
         }
 
         function prosesUploadLogMingguan(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+    const file = event.target.files[0];
+    if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {raw: false});
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {raw: false});
 
-                    if (jsonData.length > 0) {
-                        let riwayatHarian = {}; 
+            if (jsonData.length > 0) {
+                let riwayatHarian = {}; 
 
-                        jsonData.forEach(row => {
-                            let nipPegawai, namaPegawai, namaSekolah, tanggal, jam, status;
-                            const keys = Object.keys(row);
+                jsonData.forEach(row => {
+                    let nipPegawai, namaPegawai, namaSekolah, tanggal, jam, status;
+                    const keys = Object.keys(row);
 
-                            if (keys.length === 1 && keys[0].includes(',')) {
-                                const headerArr = keys[0].split(',');
-                                const valueArr = String(row[keys[0]]).split(',');
+                    if (keys.length === 1 && keys[0].includes(',')) {
+                        const headerArr = keys[0].split(',');
+                        const valueArr = String(row[keys[0]]).split(',');
 
-                                const nipIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'nip');
-                                const namaIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'nama');
-                                const sekolahIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'sekolah');
-                                const tglIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'tanggal');
-                                const jamIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'jam');
-                                const statusIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'status');
+                        const nipIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'nip');
+                        const namaIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'nama');
+                        const sekolahIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'sekolah');
+                        const tglIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'tanggal');
+                        const jamIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'jam');
+                        const statusIdx = headerArr.findIndex(h => h.toLowerCase().trim() === 'status');
 
-                                nipPegawai = nipIdx !== -1 ? String(valueArr[nipIdx] || '').trim() : '-';
-                                namaPegawai = namaIdx !== -1 ? String(valueArr[namaIdx] || '').trim() : '-';
-                                namaSekolah = sekolahIdx !== -1 ? String(valueArr[sekolahIdx] || '').trim() : '-';
-                                tanggal = tglIdx !== -1 ? String(valueArr[tglIdx] || '').trim() : '';
-                                jam = jamIdx !== -1 ? String(valueArr[jamIdx] || '').trim() : '';
-                                status = statusIdx !== -1 ? String(valueArr[statusIdx] || '').trim().toUpperCase() : '';
-            
-                            } else {
-                                nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
-                                namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
-                                namaSekolah = String(row['sekolah'] || row['Sekolah'] || row['SEKOLAH'] || '-').trim();
-                                tanggal = String(row['tanggal'] || row['Tanggal'] || '').trim();
-                                jam = String(row['jam'] || row['Jam'] || '').trim();
-                                status = String(row['status'] || row['Status'] || '').trim().toUpperCase();
-                            }
-
-                            if (nipPegawai === '-' || nipPegawai === '') return;
-
-                            let key = nipPegawai + "_" + tanggal;
-
-                            if (!riwayatHarian[key]) {
-                                riwayatHarian[key] = {
-                                    nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah, tanggal: tanggal,
-                                    datang: null, pulang: null, izinSakit: 0
-                                };
-                            }
-
-                            if (status === 'MASUK' || status === 'DATANG') {
-                                if (riwayatHarian[key].datang === null) {
-                                    riwayatHarian[key].datang = jam;
-                                } else if (jam < riwayatHarian[key].datang) {
-                                    riwayatHarian[key].datang = jam;
-                                }
-                            } else if (status === 'PULANG') {
-                                if (riwayatHarian[key].pulang === null) {
-                                    riwayatHarian[key].pulang = jam;
-                                } else if (jam > riwayatHarian[key].pulang) {
-                                    riwayatHarian[key].pulang = jam;
-                                }
-                            } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
-                                riwayatHarian[key].izinSakit = 1;
-                            }
-                        });
-
-                        Object.values(riwayatHarian).forEach(record => {
-                            let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
-
-                            if (record.izinSakit > 0) {
-                                hadirBaru = 0; terlambatBaru = 0; cptPulangBaru = 0;
-                            } else if (record.datang !== null || record.pulang !== null) {
-                                hadirBaru = 1;
-                                if (record.datang !== null) {
-                                    let [jamD, mntD] = record.datang.split(':').map(Number);
-                                    let totalDatangMnt = (jamD * 60) + mntD;
-                                    let batasMasukMnt = (8 * 60);
-                                    terlambatBaru = totalDatangMnt > batasMasukMnt ? totalDatangMnt - batasMasukMnt : 0;
-                                } else { terlambatBaru = 240; }
-                                
-                                if (record.pulang !== null) {
-                                    let [jamP, mntP] = record.pulang.split(':').map(Number);
-                                    let totalPulangMnt = (jamP * 60) + mntP;
-                                    let batasPulangMnt = (16 * 60);
-                                    cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
-                                } else { cptPulangBaru = 120; }
-                            }
-
-                            let tglObj = parseTanggalLog(record.tanggal);
-                            let yyyy = tglObj.yyyy; let mm = tglObj.mm; let dd = tglObj.dd;
-
-                            let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes(record.sekolah.toUpperCase()));
-                            let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
-                            let namaSekolahFinal = matchSekolah ? matchSekolah.nama : record.sekolah;
-
-                            let existingIndex = dummyLogHarian.findIndex(l => l.nip === record.nip && l.tanggalStr === record.tanggal);
-
-                            let oldHadir = 0, oldTerlambat = 0, oldCepatPulang = 0, oldIzinSakit = 0;
-                            if (existingIndex !== -1) {
-                                let oldLog = dummyLogHarian[existingIndex];
-                                oldHadir = oldLog.hadir || 0;
-                                oldTerlambat = oldLog.terlambatMin || 0;
-                                oldCepatPulang = oldLog.cepatPulangMin || 0;
-                                oldIzinSakit = oldLog.izinSakit || 0;
-                            }
-
-                            let logData = {
-                                nip: record.nip, nama: record.nama, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
-                                tanggalStr: record.tanggal, yyyy: yyyy, mm: mm, dd: dd,
-                                hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit
-                            };
-
-                            if (existingIndex !== -1) {
-                                dummyLogHarian[existingIndex] = logData;
-                            } else {
-                                dummyLogHarian.push(logData);
-                            }
-
-                            let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
-                            if (indexPegawai !== -1) {
-                                dummyAbsensi[indexPegawai].hadir += (hadirBaru - oldHadir);
-                                dummyAbsensi[indexPegawai].terlambatMin += (terlambatBaru - oldTerlambat);
-                                dummyAbsensi[indexPegawai].cepatPulangMin += (cptPulangBaru - oldCepatPulang);
-                                dummyAbsensi[indexPegawai].izinSakit += (record.izinSakit - oldIzinSakit);
-                            } else {
-                                dummyAbsensi.push({
-                                    id: Date.now() + Math.random(),
-                                    nama: record.nama, nip: record.nip, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
-                                    hariKerja: 22, hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit, tanpaKet: 0
-                                });
-                            }
-                        });
-
-                        let hkOtomatis = hitungHariKerjaBulanIni(new Date().getFullYear(), new Date().getMonth() + 1);
-
-                        dummyAbsensi.forEach(p => {
-                            p.hariKerja = hkOtomatis;
-                            let totalTercatat = p.hadir;
-                            p.tanpaKet = p.hariKerja - totalTercatat;
-                            if (p.tanpaKet < 0) p.tanpaKet = 0;
-                        });
-
-                        if (typeof google !== 'undefined' && google.script && google.script.run) {
-                            google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
-                            google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
-                        }
-                        renderRekapAbsen(document.getElementById('content-area'));
-                        Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
+                        nipPegawai = nipIdx !== -1 ? String(valueArr[nipIdx] || '').trim() : '-';
+                        namaPegawai = namaIdx !== -1 ? String(valueArr[namaIdx] || '').trim() : '-';
+                        namaSekolah = sekolahIdx !== -1 ? String(valueArr[sekolahIdx] || '').trim() : '-';
+                        tanggal = tglIdx !== -1 ? String(valueArr[tglIdx] || '').trim() : '';
+                        jam = jamIdx !== -1 ? String(valueArr[jamIdx] || '').trim() : '';
+                        status = statusIdx !== -1 ? String(valueArr[statusIdx] || '').trim().toUpperCase() : '';
+    
+                    } else {
+                        nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
+                        namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
+                        namaSekolah = String(row['sekolah'] || row['Sekolah'] || row['SEKOLAH'] || '-').trim();
+                        tanggal = String(row['tanggal'] || row['Tanggal'] || '').trim();
+                        jam = String(row['jam'] || row['Jam'] || '').trim();
+                        status = String(row['status'] || row['Status'] || '').trim().toUpperCase();
                     }
-                } catch(err) {
-                    Swal.fire('Error', 'Gagal memproses file log CSV.', 'error');
+
+                    if (nipPegawai === '-' || nipPegawai === '') return;
+
+                    let key = nipPegawai + "_" + tanggal;
+
+                    if (!riwayatHarian[key]) {
+                        riwayatHarian[key] = {
+                            nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah, tanggal: tanggal,
+                            datang: null, pulang: null, izinSakit: 0
+                        };
+                    }
+
+                    if (status === 'MASUK' || status === 'DATANG') {
+                        if (riwayatHarian[key].datang === null) {
+                            riwayatHarian[key].datang = jam;
+                        } else if (jam < riwayatHarian[key].datang) {
+                            riwayatHarian[key].datang = jam;
+                        }
+                    } else if (status === 'PULANG') {
+                        if (riwayatHarian[key].pulang === null) {
+                            riwayatHarian[key].pulang = jam;
+                        } else if (jam > riwayatHarian[key].pulang) {
+                            riwayatHarian[key].pulang = jam;
+                        }
+                    } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
+                        riwayatHarian[key].izinSakit = 1;
+                    }
+                });
+
+                // --- 1. HITUNG FREKUENSI LUPA ABSEN DALAM SEBULAN PER NIP ---
+                let hitungLupaAbsen = {};
+                Object.values(riwayatHarian).forEach(rec => {
+                    if (rec.izinSakit === 0) {
+                        if (!hitungLupaAbsen[rec.nip]) {
+                            hitungLupaAbsen[rec.nip] = { lupaDatang: 0, lupaPulang: 0 };
+                        }
+                        // Absen Pulang ada tapi Absen Masuk Kosong
+                        if (rec.datang === null && rec.pulang !== null) {
+                            hitungLupaAbsen[rec.nip].lupaDatang++;
+                        }
+                        // Absen Masuk ada tapi Absen Pulang Kosong
+                        if (rec.datang !== null && rec.pulang === null) {
+                            hitungLupaAbsen[rec.nip].lupaPulang++;
+                        }
+                    }
+                });
+
+                // --- 2. HITUNG MENIT KETERLAMBATAN & CEPAT PULANG SESUAI ATURAN ---
+                Object.values(riwayatHarian).forEach(record => {
+                    let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
+
+                    if (record.izinSakit > 0) {
+                        hadirBaru = 0; terlambatBaru = 0; cptPulangBaru = 0;
+                    } else if (record.datang !== null || record.pulang !== null) {
+                        hadirBaru = 1;
+
+                        let countLupaDatang = hitungLupaAbsen[record.nip] ? hitungLupaAbsen[record.nip].lupaDatang : 0;
+                        let countLupaPulang = hitungLupaAbsen[record.nip] ? hitungLupaAbsen[record.nip].lupaPulang : 0;
+                        
+                        // Perhitungan Keterlambatan (Absen Masuk)
+                        if (record.datang !== null) {
+                            let [jamD, mntD] = record.datang.split(':').map(Number);
+                            let totalDatangMnt = (jamD * 60) + mntD;
+                            let batasMasukMnt = (8 * 60);
+                            terlambatBaru = totalDatangMnt > batasMasukMnt ? totalDatangMnt - batasMasukMnt : 0;
+                        } else { 
+                            // Tidak Absen Masuk: Jika >= 5 kali denda 480 menit, jika < 5 kali denda standar 240 menit
+                            terlambatBaru = countLupaDatang >= 5 ? 480 : 240; 
+                        }
+                        
+                        // Perhitungan Cepat Pulang (Absen Pulang)
+                        if (record.pulang !== null) {
+                            let [jamP, mntP] = record.pulang.split(':').map(Number);
+                            let totalPulangMnt = (jamP * 60) + mntP;
+                            let batasPulangMnt = (16 * 60);
+                            cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
+                        } else { 
+                            // Tidak Absen Pulang: Jika >= 5 kali denda 480 menit, jika < 5 kali denda standar 120 menit
+                            cptPulangBaru = countLupaPulang >= 5 ? 480 : 120; 
+                        }
+                    }
+
+                    let tglObj = parseTanggalLog(record.tanggal);
+                    let yyyy = tglObj.yyyy; let mm = tglObj.mm; let dd = tglObj.dd;
+
+                    let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes(record.sekolah.toUpperCase()));
+                    let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
+                    let namaSekolahFinal = matchSekolah ? matchSekolah.nama : record.sekolah;
+
+                    let existingIndex = dummyLogHarian.findIndex(l => l.nip === record.nip && l.tanggalStr === record.tanggal);
+
+                    let oldHadir = 0, oldTerlambat = 0, oldCepatPulang = 0, oldIzinSakit = 0;
+                    if (existingIndex !== -1) {
+                        let oldLog = dummyLogHarian[existingIndex];
+                        oldHadir = oldLog.hadir || 0;
+                        oldTerlambat = oldLog.terlambatMin || 0;
+                        oldCepatPulang = oldLog.cepatPulangMin || 0;
+                        oldIzinSakit = oldLog.izinSakit || 0;
+                    }
+
+                    let logData = {
+                        nip: record.nip, nama: record.nama, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
+                        tanggalStr: record.tanggal, yyyy: yyyy, mm: mm, dd: dd,
+                        hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit
+                    };
+
+                    if (existingIndex !== -1) {
+                        dummyLogHarian[existingIndex] = logData;
+                    } else {
+                        dummyLogHarian.push(logData);
+                    }
+
+                    let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
+                    if (indexPegawai !== -1) {
+                        dummyAbsensi[indexPegawai].hadir += (hadirBaru - oldHadir);
+                        dummyAbsensi[indexPegawai].terlambatMin += (terlambatBaru - oldTerlambat);
+                        dummyAbsensi[indexPegawai].cepatPulangMin += (cptPulangBaru - oldCepatPulang);
+                        dummyAbsensi[indexPegawai].izinSakit += (record.izinSakit - oldIzinSakit);
+                    } else {
+                        dummyAbsensi.push({
+                            id: Date.now() + Math.random(),
+                            nama: record.nama, nip: record.nip, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
+                            hariKerja: 22, hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit, tanpaKet: 0
+                        });
+                    }
+                });
+
+                let hkOtomatis = hitungHariKerjaBulanIni(new Date().getFullYear(), new Date().getMonth() + 1);
+
+                dummyAbsensi.forEach(p => {
+                    p.hariKerja = hkOtomatis;
+                    let totalTercatat = p.hadir;
+                    p.tanpaKet = p.hariKerja - totalTercatat;
+                    if (p.tanpaKet < 0) p.tanpaKet = 0;
+                });
+
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
+                    google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
                 }
-            };
-            reader.readAsArrayBuffer(file);
-            event.target.value = '';
+                renderRekapAbsen(document.getElementById('content-area'));
+                Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
+            }
+        } catch(err) {
+            Swal.fire('Error', 'Gagal memproses file log CSV.', 'error');
         }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+}
 
         function downloadExcelAbsen() {
             const filterTglVal = document.getElementById('filterTanggalAbsen') ? document.getElementById('filterTanggalAbsen').value : "ALL";
@@ -2150,6 +2183,297 @@ function periksaBackupOtomatis() {
             XLSX.utils.book_append_sheet(wb, ws, "Lap. Indisipliner");
             XLSX.writeFile(wb, namaFile);
         }
+        // ==========================================
+// FITUR EDIT ABSENSI ASN (ATURAN KE-2)
+// ==========================================
+
+function renderEditAbsensi(container) {
+    if(!container) return;
+
+    let optionsSekolah = `<option value="ALL">Semua Sekolah</option>` + 
+        dummySekolah.map(s => `<option value="${s.id}">${s.nama}</option>`).join('');
+
+    container.innerHTML = `
+        <div class="glass-card p-6 mb-6 border-l-4 border-red-500 bg-red-50 shadow-sm">
+            <h3 class="text-red-700 font-bold flex items-center gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-2xl"></i> 
+                PERHATIAN: Pastikan sebelum ke menu ini sudah ada Surat Keterangan dari Kepala Sekolah!
+            </h3>
+        </div>
+
+        <div class="glass-card p-6 mb-6 flex flex-wrap items-end gap-4 bg-white border border-slate-200">
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">NIP ASN</label>
+                <input type="text" id="cariNipEdit" class="p-2 border border-slate-300 rounded text-sm w-56 font-mono" placeholder="Masukkan NIP">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih Sekolah</label>
+                <select id="cariSekolahEdit" class="p-2 border border-slate-300 rounded text-sm min-w-[200px] bg-white">${optionsSekolah}</select>
+            </div>
+            <button onclick="cariDataUntukEdit()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded text-sm font-semibold flex items-center gap-2 transition-all">
+                <i class="fa-solid fa-search"></i> Cari Data
+            </button>
+        </div>
+
+        <div class="glass-card p-6" id="areaHasilEdit">
+            <p class="text-center text-slate-500 text-sm py-4">Silakan masukkan NIP lalu klik <b>Cari Data</b>.</p>
+        </div>
+    `;
+}
+
+function cariDataUntukEdit() {
+    let nipInput = document.getElementById('cariNipEdit').value.trim();
+    let idSekolah = document.getElementById('cariSekolahEdit').value;
+    let areaHasil = document.getElementById('areaHasilEdit');
+
+    if(nipInput === '') {
+        Swal.fire('Perhatian', 'Harap masukkan NIP terlebih dahulu.', 'warning');
+        return;
+    }
+
+    let cleanNipInput = nipInput.replace(/['\s]/g, '');
+
+    let logDitemukan = dummyLogHarian.filter(l => {
+        let cleanNipLog = String(l.nip || '').replace(/['\s]/g, '');
+        return cleanNipLog === cleanNipInput && (idSekolah === "ALL" || String(l.sekolahId) === String(idSekolah));
+    });
+
+    if(logDitemukan.length === 0) {
+        areaHasil.innerHTML = `<p class="text-center text-red-500 text-sm font-bold py-6">Data absensi harian untuk NIP ${nipInput} tidak ditemukan pada sistem.</p>`;
+        return;
+    }
+
+    let rows = logDitemukan.map((l, index) => {
+        return `
+            <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
+                <td class="p-3 text-center text-slate-500 font-semibold">${index + 1}</td>
+                <td class="p-3 font-bold text-slate-700">${l.tanggalStr}</td>
+                <td class="p-3 font-semibold text-blue-950">${l.nama}</td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editHadir_${index}" value="${l.hadir || 0}" min="0" max="1" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-blue-600 focus:outline-blue-500">
+                </td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editTerlambat_${index}" value="${l.terlambatMin || 0}" min="0" class="w-20 p-1 border border-slate-300 rounded text-center font-bold text-orange-600 focus:outline-orange-500">
+                </td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editCepatPulang_${index}" value="${l.cepatPulangMin || 0}" min="0" class="w-20 p-1 border border-slate-300 rounded text-center font-bold text-yellow-600 focus:outline-yellow-500">
+                </td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editIzinSakit_${index}" value="${l.izinSakit || 0}" min="0" max="1" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-emerald-600 focus:outline-emerald-500">
+                </td>
+                <td class="p-3 text-center">
+                    <button onclick="konfirmasiSimpanEdit('${l.nip}', '${l.tanggalStr}', ${index}, '${l.nama}', '${l.sekolah}')" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow flex items-center gap-1 mx-auto">
+                        <i class="fa-solid fa-floppy-disk"></i> Simpan
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    areaHasil.innerHTML = `
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse bg-white">
+                <thead>
+                    <tr class="bg-slate-800 text-white text-xs uppercase font-bold">
+                        <th class="p-3 text-center w-12">No</th>
+                        <th class="p-3">Tanggal</th>
+                        <th class="p-3">Nama Pegawai</th>
+                        <th class="p-3 text-center bg-blue-700">Hadir</th>
+                        <th class="p-3 text-center bg-orange-600">Terlambat (Mnt)</th>
+                        <th class="p-3 text-center bg-yellow-600">Cepat Pulang (Mnt)</th>
+                        <th class="p-3 text-center bg-emerald-600">Izin/Sakit</th>
+                        <th class="p-3 text-center bg-red-600">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function konfirmasiSimpanEdit(nip, tanggalStr, index, nama, sekolah) {
+    let valHadir = parseInt(document.getElementById('editHadir_' + index).value) || 0;
+    let valTerlambat = parseInt(document.getElementById('editTerlambat_' + index).value) || 0;
+    let valCepat = parseInt(document.getElementById('editCepatPulang_' + index).value) || 0;
+    let valIzin = parseInt(document.getElementById('editIzinSakit_' + index).value) || 0;
+
+    let namaUpper = String(nama).toUpperCase();
+    let sekolahUpper = String(sekolah).toUpperCase();
+
+    // MODAL PERINGATAN DESAIN PROFESIONAL & ANIMASI
+    Swal.fire({
+        html: `
+            <style>
+                @keyframes floatTriangle {
+                    0% { transform: translateY(0) scale(0.95); }
+                    50% { transform: translateY(-8px) scale(1.05); }
+                    100% { transform: translateY(0) scale(0.95); }
+                }
+                @keyframes pulseWarningBg {
+                    0%, 100% { filter: drop-shadow(0 6px 12px rgba(239, 68, 68, 0.4)); }
+                    50% { filter: drop-shadow(0 12px 20px rgba(239, 68, 68, 0.7)); }
+                }
+                .warning-wrapper {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding: 8px 4px;
+                }
+                .warning-triangle-3d {
+                    animation: floatTriangle 2.2s infinite ease-in-out, pulseWarningBg 2.2s infinite ease-in-out;
+                    width: 76px;
+                    height: 70px;
+                    background: linear-gradient(145deg, #ff3b30 0%, #dc2626 100%);
+                    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+                    display: flex;
+                    align-items: flex-end;
+                    justify-content: center;
+                    margin-bottom: 14px;
+                    position: relative;
+                }
+                .warning-exclamation {
+                    color: #ffffff;
+                    font-weight: 900;
+                    font-size: 34px;
+                    line-height: 1;
+                    margin-bottom: 6px;
+                    font-family: 'Arial Black', sans-serif;
+                }
+                .warning-badge {
+                    background: #fee2e2;
+                    color: #b91c1c;
+                    font-weight: 900;
+                    font-size: 11px;
+                    letter-spacing: 2px;
+                    padding: 4px 14px;
+                    border-radius: 30px;
+                    border: 1px solid #fca5a5;
+                    margin-bottom: 12px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+            </style>
+            
+            <div class="warning-wrapper">
+                <div class="warning-triangle-3d">
+                    <span class="warning-exclamation">!</span>
+                </div>
+                <div class="warning-badge">
+                    <i class="fa-solid fa-triangle-exclamation"></i> WARNING
+                </div>
+                <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin-bottom: 10px;">PERINGATAN PERUBAHAN ABSENSI</h3>
+                <p style="font-size: 13px; color: #475569; line-height: 1.6; margin: 0 5px;">
+                    APAKAH ANDA YAKIN MERUBAH ABSENSI ASN<br>
+                    <b style="color: #0f172a; font-size: 14px; font-weight: 800;">${namaUpper}</b><br>
+                    <span style="font-family: monospace; color: #dc2626; font-weight: 700;">(${nip})</span> - <b style="color: #1e3a8a;">${sekolahUpper}</b>?
+                </p>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '<i class="fa-solid fa-check mr-1"></i> YA, SAYA YAKIN',
+        cancelButtonText: 'Batal',
+        customClass: {
+            popup: 'rounded-2xl p-6 shadow-2xl border border-slate-100'
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            prosesSimpanEditAbsen(nip, tanggalStr, valHadir, valTerlambat, valCepat, valIzin);
+        }
+    });
+}
+
+function prosesSimpanEditAbsen(nip, tanggalStr, valHadir, valTerlambat, valCepat, valIzin) {
+    let cleanNip = String(nip).replace(/['\s]/g, '');
+    let logIndex = dummyLogHarian.findIndex(l => String(l.nip).replace(/['\s]/g, '') === cleanNip && l.tanggalStr === tanggalStr);
+    
+    if (logIndex !== -1) {
+        let oldLog = dummyLogHarian[logIndex];
+        
+        let diffHadir = valHadir - (parseInt(oldLog.hadir) || 0);
+        let diffTerlambat = valTerlambat - (parseInt(oldLog.terlambatMin) || 0);
+        let diffCepat = valCepat - (parseInt(oldLog.cepatPulangMin) || 0);
+        let diffIzin = valIzin - (parseInt(oldLog.izinSakit) || 0);
+
+        dummyLogHarian[logIndex].hadir = valHadir;
+        dummyLogHarian[logIndex].terlambatMin = valTerlambat;
+        dummyLogHarian[logIndex].cepatPulangMin = valCepat;
+        dummyLogHarian[logIndex].izinSakit = valIzin;
+
+        let absenIndex = dummyAbsensi.findIndex(p => String(p.nip).replace(/['\s]/g, '') === cleanNip);
+        if (absenIndex !== -1) {
+            dummyAbsensi[absenIndex].hadir += diffHadir;
+            dummyAbsensi[absenIndex].terlambatMin += diffTerlambat;
+            dummyAbsensi[absenIndex].cepatPulangMin += diffCepat;
+            dummyAbsensi[absenIndex].izinSakit += diffIzin;
+            
+            let totalTercatat = dummyAbsensi[absenIndex].hadir + dummyAbsensi[absenIndex].izinSakit;
+            dummyAbsensi[absenIndex].tanpaKet = dummyAbsensi[absenIndex].hariKerja - totalTercatat;
+            if(dummyAbsensi[absenIndex].tanpaKet < 0) dummyAbsensi[absenIndex].tanpaKet = 0;
+        }
+
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
+            google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
+        }
+
+        // NOTIFIKASI SUKSES DENGAN JEMPOL PROPORSIONAL DAN ANIMASI POP-UP
+        Swal.fire({
+            html: `
+                <style>
+                    @keyframes popThumb {
+                        0% { transform: scale(0) rotate(-25deg); opacity: 0; }
+                        60% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+                        80% { transform: scale(0.95) rotate(-5deg); }
+                        100% { transform: scale(1) rotate(0deg); opacity: 1; }
+                    }
+                    @keyframes ringGlow {
+                        0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+                        50% { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
+                    }
+                    .success-wrapper {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        padding: 10px 4px;
+                    }
+                    .thumb-badge-modern {
+                        animation: popThumb 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, ringGlow 2s infinite;
+                        width: 64px;
+                        height: 64px;
+                        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #ffffff;
+                        font-size: 28px;
+                        margin-bottom: 14px;
+                    }
+                </style>
+                <div class="success-wrapper">
+                    <div class="thumb-badge-modern">
+                        <i class="fa-solid fa-thumbs-up"></i>
+                    </div>
+                    <h3 style="font-size: 19px; font-weight: 800; color: #065f46; margin-bottom: 6px;">SUKSES!</h3>
+                    <p style="font-size: 13px; color: #475569; margin: 0; line-height: 1.5;">
+                        Data absensi harian dan rekap bulanan berhasil diperbarui secara otomatis.
+                    </p>
+                </div>
+            `,
+            showConfirmButton: false,
+            timer: 2200,
+            customClass: {
+                popup: 'rounded-2xl p-6 shadow-2xl border border-emerald-100'
+            }
+        });
+
+    } else {
+        Swal.fire('Error', 'Data log absensi harian tidak ditemukan.', 'error');
+    }
+}
     </script>
 </body>
 </html>
