@@ -386,12 +386,35 @@ function periksaBackupOtomatis() {
 
             let activeSchools = schoolStats.filter(s => s.totalASN > 0);
 
-            let top5AlpaSekolah = [...activeSchools].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
-            let top5TerlambatSekolah = [...activeSchools].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
-            let top5CepatPulangSekolah = [...activeSchools].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin).slice(0, 5);
-            let best5AlpaSekolah = [...activeSchools].sort((a,b) => a.avgTanpaKet - b.avgTanpaKet).slice(0, 5);
-            let best5TerlambatSekolah = [...activeSchools].sort((a,b) => a.avgTerlambatMin - b.avgTerlambatMin).slice(0, 5);
-            let best5CepatPulangSekolah = [...activeSchools].sort((a,b) => a.avgCepatPulangMin - b.avgCepatPulangMin).slice(0, 5);
+            // 1. EVALUASI PRESENSI (INDISIPLINER TERBANYAK)
+            let top5AlpaSekolah = [...activeSchools].sort((a,b) => b.avgTanpaKet - a.avgTanpaKet || b.avgTerlambatMin - a.avgTerlambatMin).slice(0, 5);
+            let top5TerlambatSekolah = [...activeSchools].sort((a,b) => b.avgTerlambatMin - a.avgTerlambatMin || b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
+            let top5CepatPulangSekolah = [...activeSchools].sort((a,b) => b.avgCepatPulangMin - a.avgCepatPulangMin || b.avgTanpaKet - a.avgTanpaKet).slice(0, 5);
+
+            // 2. KEDISIPLINAN TERBAIK (DISIPLIN TINGGI & MEMILIKI RIWAYAT KEHADIRAN)
+            // Syarat Mutlak: Sekolah harus memiliki setidaknya 1 kehadiran (hadir > 0)
+            let eligibleBestSchools = activeSchools.filter(s => s.hadir > 0);
+            if (eligibleBestSchools.length === 0) eligibleBestSchools = [...activeSchools];
+
+            // A. Tanpa Keterangan Terendah: Utamakan Alpa terkecil, tie-breaker keterlambatan & cepat pulang terkecil
+            let best5AlpaSekolah = [...eligibleBestSchools].sort((a,b) => {
+                if (a.avgTanpaKet !== b.avgTanpaKet) return a.avgTanpaKet - b.avgTanpaKet;
+                return (a.avgTerlambatMin + a.avgCepatPulangMin) - (b.avgTerlambatMin + b.avgCepatPulangMin);
+            }).slice(0, 5);
+
+            // B. Keterlambatan Terendah: Utamakan Alpa terkecil dulu (wajib disiplin hadir), baru keterlambatan terkecil
+            let best5TerlambatSekolah = [...eligibleBestSchools].sort((a,b) => {
+                if (a.avgTanpaKet !== b.avgTanpaKet) return a.avgTanpaKet - b.avgTanpaKet;
+                if (a.avgTerlambatMin !== b.avgTerlambatMin) return a.avgTerlambatMin - b.avgTerlambatMin;
+                return a.avgCepatPulangMin - b.avgCepatPulangMin;
+            }).slice(0, 5);
+
+            // C. Pulang Cepat Terendah: Utamakan Alpa terkecil dulu (wajib disiplin hadir), baru pulang cepat terkecil
+            let best5CepatPulangSekolah = [...eligibleBestSchools].sort((a,b) => {
+                if (a.avgTanpaKet !== b.avgTanpaKet) return a.avgTanpaKet - b.avgTanpaKet;
+                if (a.avgCepatPulangMin !== b.avgCepatPulangMin) return a.avgCepatPulangMin - b.avgCepatPulangMin;
+                return a.avgTerlambatMin - b.avgTerlambatMin;
+            }).slice(0, 5);
 
             let candidatesASN = absensiDashboard.filter(a => (parseInt(a.hadir) || 0) > 0);
             if (candidatesASN.length === 0) candidatesASN = [...absensiDashboard];
