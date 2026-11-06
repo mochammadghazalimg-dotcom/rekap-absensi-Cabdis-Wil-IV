@@ -218,6 +218,54 @@ function prosesBackupDanResetBulanan(snapshotJSON, targetBulan, targetTahun) {
     return { status: 'fail', error: e.message };
   }
 }
+// ==========================================================
+// FUNGSI SYSTEM LOGIN ADMIN (DATABASE SPREADSHEET)
+// ==========================================================
+function prosesLoginAdmin(username, password) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheetAdmin = ss.getSheetByName('Data_Admin') || ss.getSheetByName('Data Admin');
+    
+    // 1. Jika sheet belum ada, buat otomatis & masukkan akun default
+    if (!sheetAdmin) {
+      sheetAdmin = ss.insertSheet('Data_Admin');
+      sheetAdmin.appendRow(['Username', 'Password', 'Nama', 'Role']);
+      sheetAdmin.appendRow(['admin', 'admin123', 'Admin Cabdin', 'Super Admin']);
+      SpreadsheetApp.flush();
+    }
+    
+    let raw = sheetAdmin.getDataRange().getValues();
+    if (raw.length <= 1) {
+      sheetAdmin.appendRow(['admin', 'admin123', 'Admin Cabdin', 'Super Admin']);
+      raw = sheetAdmin.getDataRange().getValues();
+    }
+    
+    // 2. Cocokkan Username & Password
+    let userClean = String(username || '').trim().toLowerCase();
+    let passClean = String(password || '').trim();
+
+    for (let i = 1; i < raw.length; i++) {
+      let u = String(raw[i][0] || '').trim().toLowerCase();
+      let p = String(raw[i][1] || '').trim();
+      let nama = String(raw[i][2] || 'Admin Cabdin').trim();
+      let role = String(raw[i][3] || 'Administrator').trim();
+      
+      if (u === userClean && p === passClean) {
+        return {
+          status: 'success',
+          user: { username: raw[i][0], nama: nama, role: role }
+        };
+      }
+    }
+    
+    return { status: 'fail', message: 'Username atau Kata Sandi salah!' };
+  } catch(e) {
+    if (String(username).trim() === 'admin' && String(password).trim() === 'admin123') {
+      return { status: 'success', user: { username: 'admin', nama: 'Admin Cabdin', role: 'Super Admin' } };
+    }
+    return { status: 'fail', message: 'Terjadi kesalahan sistem: ' + e.message };
+  }
+}
 
 function simpanDataPegawaiKeSheet(listPegawai) {
   try {
