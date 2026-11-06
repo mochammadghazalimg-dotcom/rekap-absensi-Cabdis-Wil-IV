@@ -1656,6 +1656,8 @@ function periksaBackupOtomatis() {
 
             if (jsonData.length > 0) {
                 let riwayatHarian = {}; 
+                let today = new Date();
+                today.setHours(23, 59, 59, 999); // Batas akhir hari ini
 
                 jsonData.forEach(row => {
                     let nipPegawai, namaPegawai, namaSekolah, tanggal, jam, status;
@@ -1678,7 +1680,6 @@ function periksaBackupOtomatis() {
                         tanggal = tglIdx !== -1 ? String(valueArr[tglIdx] || '').trim() : '';
                         jam = jamIdx !== -1 ? String(valueArr[jamIdx] || '').trim() : '';
                         status = statusIdx !== -1 ? String(valueArr[statusIdx] || '').trim().toUpperCase() : '';
-    
                     } else {
                         nipPegawai = String(row['NIP'] || row['nip'] || '-').trim();
                         namaPegawai = String(row['nama'] || row['Nama'] || row['NAMA'] || row['Nama Pegawai'] || '-').trim();
@@ -1688,7 +1689,16 @@ function periksaBackupOtomatis() {
                         status = String(row['status'] || row['Status'] || '').trim().toUpperCase();
                     }
 
-                    if (nipPegawai === '-' || nipPegawai === '') return;
+                    if (nipPegawai === '-' || nipPegawai === '' || !tanggal) return;
+
+                    // FILTER KEAMANAN TANGGAL: Cek apakah tanggal log melebihi hari ini
+                    let tglCheck = parseTanggalLog(tanggal);
+                    let logDateObj = new Date(tglCheck.yyyy, tglCheck.mm - 1, tglCheck.dd);
+                    
+                    // Jika log berasal dari tanggal di masa depan (melebihi hari ini), lewati!
+                    if (logDateObj > today) {
+                        return; 
+                    }
 
                     let key = nipPegawai + "_" + tanggal;
 
@@ -1716,25 +1726,31 @@ function periksaBackupOtomatis() {
                     }
                 });
 
-                // --- 1. HITUNG FREKUENSI LUPA ABSEN DALAM SEBULAN PER NIP ---
+                // Hitung frekuensi lupa absen dalam sebulan per NIP
                 let hitungLupaAbsen = {};
                 Object.values(riwayatHarian).forEach(rec => {
                     if (rec.izinSakit === 0) {
                         if (!hitungLupaAbsen[rec.nip]) {
                             hitungLupaAbsen[rec.nip] = { lupaDatang: 0, lupaPulang: 0 };
                         }
-                        // Absen Pulang ada tapi Absen Masuk Kosong
                         if (rec.datang === null && rec.pulang !== null) {
                             hitungLupaAbsen[rec.nip].lupaDatang++;
                         }
-                        // Absen Masuk ada tapi Absen Pulang Kosong
                         if (rec.datang !== null && rec.pulang === null) {
                             hitungLupaAbsen[rec.nip].lupaPulang++;
                         }
                     }
                 });
 
-                // --- 2. HITUNG MENIT KETERLAMBATAN & CEPAT PULANG SESUAI ATURAN ---
+                // Reset hitungan dummyAbsensi dari nol sebelum kalkulasi ulang log
+                dummyAbsensi.forEach(a => {
+                    a.hadir = 0;
+                    a.terlambatMin = 0;
+                    a.cepatPulangMin = 0;
+                    a.izinSakit = 0;
+                });
+
+                // Hitung menit keterlambatan & cepat pulang
                 Object.values(riwayatHarian).forEach(record => {
                     let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
 
@@ -1746,25 +1762,21 @@ function periksaBackupOtomatis() {
                         let countLupaDatang = hitungLupaAbsen[record.nip] ? hitungLupaAbsen[record.nip].lupaDatang : 0;
                         let countLupaPulang = hitungLupaAbsen[record.nip] ? hitungLupaAbsen[record.nip].lupaPulang : 0;
                         
-                        // Perhitungan Keterlambatan (Absen Masuk)
                         if (record.datang !== null) {
                             let [jamD, mntD] = record.datang.split(':').map(Number);
                             let totalDatangMnt = (jamD * 60) + mntD;
                             let batasMasukMnt = (8 * 60);
                             terlambatBaru = totalDatangMnt > batasMasukMnt ? totalDatangMnt - batasMasukMnt : 0;
                         } else { 
-                            // Tidak Absen Masuk: Jika >= 5 kali denda 480 menit, jika < 5 kali denda standar 240 menit
                             terlambatBaru = countLupaDatang >= 5 ? 480 : 240; 
                         }
                         
-                        // Perhitungan Cepat Pulang (Absen Pulang)
                         if (record.pulang !== null) {
                             let [jamP, mntP] = record.pulang.split(':').map(Number);
                             let totalPulangMnt = (jamP * 60) + mntP;
                             let batasPulangMnt = (16 * 60);
                             cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
                         } else { 
-                            // Tidak Absen Pulang: Jika >= 5 kali denda 480 menit, jika < 5 kali denda standar 120 menit
                             cptPulangBaru = countLupaPulang >= 5 ? 480 : 120; 
                         }
                     }
@@ -1776,16 +1788,7 @@ function periksaBackupOtomatis() {
                     let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
                     let namaSekolahFinal = matchSekolah ? matchSekolah.nama : record.sekolah;
 
-                    let existingIndex = dummyLogHarian.findIndex(l => l.nip === record.nip && l.tanggalStr === record.tanggal);
-
-                    let oldHadir = 0, oldTerlambat = 0, oldCepatPulang = 0, oldIzinSakit = 0;
-                    if (existingIndex !== -1) {
-                        let oldLog = dummyLogHarian[existingIndex];
-                        oldHadir = oldLog.hadir || 0;
-                        oldTerlambat = oldLog.terlambatMin || 0;
-                        oldCepatPulang = oldLog.cepatPulangMin || 0;
-                        oldIzinSakit = oldLog.izinSakit || 0;
-                    }
+                    let existingIndex = dummyLogHarian.findIndex(l => String(l.nip).replace(/['\s]/g, '') === String(record.nip).replace(/['\s]/g, '') && l.tanggalStr === record.tanggal);
 
                     let logData = {
                         nip: record.nip, nama: record.nama, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
@@ -1801,10 +1804,10 @@ function periksaBackupOtomatis() {
 
                     let indexPegawai = dummyAbsensi.findIndex(p => String(p.nip).trim() === String(record.nip).trim());
                     if (indexPegawai !== -1) {
-                        dummyAbsensi[indexPegawai].hadir += (hadirBaru - oldHadir);
-                        dummyAbsensi[indexPegawai].terlambatMin += (terlambatBaru - oldTerlambat);
-                        dummyAbsensi[indexPegawai].cepatPulangMin += (cptPulangBaru - oldCepatPulang);
-                        dummyAbsensi[indexPegawai].izinSakit += (record.izinSakit - oldIzinSakit);
+                        dummyAbsensi[indexPegawai].hadir += hadirBaru;
+                        dummyAbsensi[indexPegawai].terlambatMin += terlambatBaru;
+                        dummyAbsensi[indexPegawai].cepatPulangMin += cptPulangBaru;
+                        dummyAbsensi[indexPegawai].izinSakit += record.izinSakit;
                     } else {
                         dummyAbsensi.push({
                             id: Date.now() + Math.random(),
@@ -1818,7 +1821,7 @@ function periksaBackupOtomatis() {
 
                 dummyAbsensi.forEach(p => {
                     p.hariKerja = hkOtomatis;
-                    let totalTercatat = p.hadir;
+                    let totalTercatat = p.hadir + p.izinSakit;
                     p.tanpaKet = p.hariKerja - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -1828,7 +1831,7 @@ function periksaBackupOtomatis() {
                     google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
                 }
                 renderRekapAbsen(document.getElementById('content-area'));
-                Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
+                Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis (Tanggal masa depan telah disaring).', 'success');
             }
         } catch(err) {
             Swal.fire('Error', 'Gagal memproses file log CSV.', 'error');
