@@ -2429,14 +2429,38 @@ function periksaBackupOtomatis() {
             XLSX.writeFile(wb, namaFile);
         }
         // ==========================================
-// FITUR EDIT ABSENSI ASN (ATURAN KE-2)
+// FITUR EDIT ABSENSI ASN (VALIDASI KETAT NIP + TANGGAL)
 // ==========================================
 
 function renderEditAbsensi(container) {
     if(!container) return;
 
+    let now = new Date();
+    let currentBulan = now.getMonth() + 1;
+    let currentTahun = now.getFullYear();
+
     let optionsSekolah = `<option value="ALL">Semua Sekolah</option>` + 
         dummySekolah.map(s => `<option value="${s.id}">${s.nama}</option>`).join('');
+
+    let optionTanggal = `<option value="">-- Pilih Tanggal --</option>`;
+    for(let d = 1; d <= 31; d++) {
+        optionTanggal += `<option value="${d}">Tanggal ${d}</option>`;
+    }
+
+    let namaBulan = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+
+    let optionBulan = namaBulan.map((b, idx) => {
+        let val = idx + 1;
+        return `<option value="${val}" ${val === currentBulan ? 'selected' : ''}>${b}</option>`;
+    }).join('');
+
+    let tahunList = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+    let optionTahun = tahunList.map(t => {
+        return `<option value="${t}" ${t === currentTahun ? 'selected' : ''}>${t}</option>`;
+    }).join('');
 
     container.innerHTML = `
         <div class="glass-card p-6 mb-6 border-l-4 border-red-500 bg-red-50 shadow-sm">
@@ -2446,14 +2470,26 @@ function renderEditAbsensi(container) {
             </h3>
         </div>
 
-        <div class="glass-card p-6 mb-6 flex flex-wrap items-end gap-4 bg-white border border-slate-200">
+        <div class="glass-card p-6 mb-6 flex flex-wrap items-end gap-3 bg-white border border-slate-200">
             <div>
-                <label class="block text-xs font-semibold text-slate-600 mb-1">NIP ASN</label>
-                <input type="text" id="cariNipEdit" class="p-2 border border-slate-300 rounded text-sm w-56 font-mono" placeholder="Masukkan NIP">
+                <label class="block text-xs font-bold text-slate-700 mb-1">NIP ASN <span class="text-red-600">*Wajib</span></label>
+                <input type="text" id="cariNipEdit" class="p-2 border border-slate-300 rounded text-sm w-48 font-mono" placeholder="Masukkan NIP">
             </div>
             <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih Sekolah</label>
-                <select id="cariSekolahEdit" class="p-2 border border-slate-300 rounded text-sm min-w-[200px] bg-white">${optionsSekolah}</select>
+                <select id="cariSekolahEdit" class="p-2 border border-slate-300 rounded text-sm min-w-[180px] bg-white">${optionsSekolah}</select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal <span class="text-red-600">*Wajib</span></label>
+                <select id="cariTglEdit" class="p-2 border border-slate-300 rounded text-sm w-36 bg-white">${optionTanggal}</select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Bulan</label>
+                <select id="cariBlnEdit" class="p-2 border border-slate-300 rounded text-sm w-36 bg-white">${optionBulan}</select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tahun</label>
+                <select id="cariThnEdit" class="p-2 border border-slate-300 rounded text-sm w-28 bg-white">${optionTahun}</select>
             </div>
             <button onclick="cariDataUntukEdit()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded text-sm font-semibold flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-search"></i> Cari Data
@@ -2461,7 +2497,7 @@ function renderEditAbsensi(container) {
         </div>
 
         <div class="glass-card p-6" id="areaHasilEdit">
-            <p class="text-center text-slate-500 text-sm py-4">Silakan masukkan NIP lalu klik <b>Cari Data</b>.</p>
+            <p class="text-center text-slate-500 text-sm py-4">Silakan masukkan NIP dan pilih Tanggal lalu klik <b>Cari Data</b>.</p>
         </div>
     `;
 }
@@ -2469,30 +2505,54 @@ function renderEditAbsensi(container) {
 function cariDataUntukEdit() {
     let nipInput = document.getElementById('cariNipEdit').value.trim();
     let idSekolah = document.getElementById('cariSekolahEdit').value;
+    let tglVal = document.getElementById('cariTglEdit').value;
+    let blnVal = document.getElementById('cariBlnEdit').value;
+    let thnVal = document.getElementById('cariThnEdit').value;
     let areaHasil = document.getElementById('areaHasilEdit');
 
-    if(nipInput === '') {
-        Swal.fire('Perhatian', 'Harap masukkan NIP terlebih dahulu.', 'warning');
+    // VALIDASI KETAT: JIKA NIP ATAU TANGGAL KOSONG, PENCARIAN DITOLAK
+    if (nipInput === '' || tglVal === '') {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Pencarian Ditolak!',
+            html: '<div class="text-left text-sm text-slate-700"><p class="font-bold text-red-600 mb-1">Peringatan Keamanan Data:</p><p>Admin <b>WAJIB mengisi NIP ASN</b> dan <b>memilih Tanggal</b> sebelum data dapat ditampilkan.</p></div>',
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Mengerti'
+        });
         return;
     }
 
     let cleanNipInput = nipInput.replace(/['\s]/g, '');
 
+    // PENJARINGAN DATA LOG HARIAN KETAT PER NIP & TANGGAL
     let logDitemukan = dummyLogHarian.filter(l => {
         let cleanNipLog = String(l.nip || '').replace(/['\s]/g, '');
-        return cleanNipLog === cleanNipInput && (idSekolah === "ALL" || String(l.sekolahId) === String(idSekolah));
+
+        let matchNip = (cleanNipLog === cleanNipInput);
+        let matchSekolah = (idSekolah === "ALL" || String(l.sekolahId) === String(idSekolah));
+        let matchTgl = (parseInt(l.dd) === parseInt(tglVal));
+        let matchBln = (blnVal === "ALL" || parseInt(l.mm) === parseInt(blnVal));
+        let matchThn = (thnVal === "ALL" || parseInt(l.yyyy) === parseInt(thnVal));
+
+        return matchNip && matchSekolah && matchTgl && matchBln && matchThn;
     });
 
     if(logDitemukan.length === 0) {
-        areaHasil.innerHTML = `<p class="text-center text-red-500 text-sm font-bold py-6">Data absensi harian untuk NIP ${nipInput} tidak ditemukan pada sistem.</p>`;
+        areaHasil.innerHTML = `<p class="text-center text-red-500 text-sm font-bold py-6">Data absensi harian tidak ditemukan untuk NIP ${nipInput} pada tanggal yang dipilih.</p>`;
         return;
     }
 
     let rows = logDitemukan.map((l, index) => {
+        // TAMPILAN TANGGAL RINGKAS (DD/MM/YYYY)
+        let ddStr = String(l.dd || 1).padStart(2, '0');
+        let mmStr = String(l.mm || 1).padStart(2, '0');
+        let yyyyStr = l.yyyy || new Date().getFullYear();
+        let tglFormatRapi = `${ddStr}/${mmStr}/${yyyyStr}`;
+
         return `
             <tr class="border-b border-slate-100 hover:bg-slate-50 text-sm">
                 <td class="p-3 text-center text-slate-500 font-semibold">${index + 1}</td>
-                <td class="p-3 font-bold text-slate-700">${l.tanggalStr}</td>
+                <td class="p-3 font-bold text-slate-700 font-mono">${tglFormatRapi}</td>
                 <td class="p-3 font-semibold text-blue-950">${l.nama}</td>
                 <td class="p-3 text-center">
                     <input type="number" id="editHadir_${index}" value="${l.hadir || 0}" min="0" max="1" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-blue-600 focus:outline-blue-500">
