@@ -73,20 +73,28 @@ function ambilSemuaDataFromSheet() {
       if (raw.length > 1) {
         raw.shift();
         dataLogHarian = raw.filter(row => row[0]).map(row => {
-          let yr = parseInt(row[4]) || 0; 
+          let yr = parseInt(row[3]) || 0; // Kolom D: Tahun
           if (yr > 0 && yr < 100) yr += 2000;
+          let mm = parseInt(row[4]) || 0; // Kolom E: Bulan
+          let dd = parseInt(row[5]) || 0; // Kolom F: Hari
+          
+          // Generate string tanggal otomatis untuk kebutuhan internal aplikasi web
+          let mmStr = String(mm).padStart(2, '0');
+          let ddStr = String(dd).padStart(2, '0');
+          let tglStr = `${yr}-${mmStr}-${ddStr}`;
+
           return {
             nip: String(row[0] || '').replace(/['\s]/g, '').trim(), 
             nama: String(row[1] || '').trim(), 
             sekolah: String(row[2] || '').trim(),
-            tanggalStr: String(row[3] || '').trim(), 
+            tanggalStr: tglStr, 
             yyyy: yr, 
-            mm: parseInt(row[5]) || 0, 
-            dd: parseInt(row[6]) || 0,
-            hadir: parseInt(row[7]) || 0, 
-            terlambatMin: parseInt(row[8]) || 0, 
-            cepatPulangMin: parseInt(row[9]) || 0, 
-            izinSakit: parseInt(row[10]) || 0
+            mm: mm, 
+            dd: dd,
+            hadir: parseInt(row[6]) || 0, 
+            terlambatMin: parseInt(row[7]) || 0, 
+            cepatPulangMin: parseInt(row[8]) || 0, 
+            izinSakit: parseInt(row[9]) || 0
           };
         });
       }
@@ -318,16 +326,32 @@ function simpanLogHarianKeSheet(listLog) {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     let sheet = ss.getSheetByName('Log_Harian') || ss.insertSheet('Log_Harian');
     sheet.clearContents();
-    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tanggal', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL']];
+    
+    // Header Baru (10 Kolom tanpa kolom 'Tanggal')
+    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL']];
+    
     if (listLog && listLog.length > 0) {
       listLog.forEach(l => {
         let cleanNip = String(l.nip || '').replace(/['\s]/g, '');
         let yr = parseInt(l.yyyy) || 0;
         if (yr > 0 && yr < 100) yr += 2000;
-        rows.push(["'" + cleanNip, l.nama, l.sekolah, l.tanggalStr, yr, l.mm, l.dd, l.hadir, l.terlambatMin, l.cepatPulangMin, l.izinSakit]);
+        
+        rows.push([
+          "'" + cleanNip, 
+          l.nama, 
+          l.sekolah, 
+          yr, 
+          l.mm, 
+          l.dd, 
+          l.hadir, 
+          l.terlambatMin, 
+          l.cepatPulangMin, 
+          l.izinSakit
+        ]);
       });
     }
-    sheet.getRange(1, 1, rows.length, 11).setValues(rows);
+    
+    sheet.getRange(1, 1, rows.length, 10).setValues(rows);
     return "OK";
   } catch(e) { return "Error: " + e.message; }
 }
