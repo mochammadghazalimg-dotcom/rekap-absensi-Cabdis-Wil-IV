@@ -1904,6 +1904,7 @@ function periksaBackupOtomatis() {
 
             if (jsonData.length > 0) {
                 let riwayatHarian = {}; 
+                let asnTidakTerdaftar = [];
                 let today = new Date();
                 today.setHours(23, 59, 59, 999); // Batas akhir hari ini
 
@@ -1938,7 +1939,17 @@ function periksaBackupOtomatis() {
                     }
 
                     if (nipPegawai === '-' || nipPegawai === '' || !tanggal) return;
+                    // --- 1. VALIDASI NIP ASN (Cek Master Pegawai) ---
+                    let cleanNipCheck = String(nipPegawai).replace(/['\s]/g, '');
+                    let pegEksis = dummyPegawai.find(p => String(p.nip).replace(/['\s]/g, '') === cleanNipCheck);
 
+                    if (!pegEksis) {
+                        // Jika NIP tidak terdaftar di Master Pegawai, catat ke daftar tidak terdaftar lalu lewati
+                        if (!asnTidakTerdaftar.some(x => String(x.nip).replace(/['\s]/g, '') === cleanNipCheck)) {
+                            asnTidakTerdaftar.push({ nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah });
+                        }
+                        return; // Abaikan data absensi ini
+                    }
                     // FILTER KEAMANAN TANGGAL: Cek apakah tanggal log melebihi hari ini
                     let tglCheck = parseTanggalLog(tanggal);
                     let logDateObj = new Date(tglCheck.yyyy, tglCheck.mm - 1, tglCheck.dd);
@@ -1950,8 +1961,7 @@ function periksaBackupOtomatis() {
 
                     let key = nipPegawai + "_" + tanggal;
 
-                    // 1. CEK DATABASE: Apakah di database sudah ada status Izin/Sakit/Cuti/DL sebelumnya?
-                    let cleanNipCheck = String(nipPegawai).replace(/['\s]/g, '');
+                    // Cek apakah di DB log harian sudah ada status Izin/Sakit/Cuti/DL sebelumnya
                     let logEksis = dummyLogHarian.find(l => String(l.nip).replace(/['\s]/g, '') === cleanNipCheck && l.tanggalStr === tanggal);
                     let isSudahIzinDiDB = logEksis && (parseInt(logEksis.izinSakit) > 0);
 
@@ -1962,14 +1972,13 @@ function periksaBackupOtomatis() {
                         };
                     }
 
-                    // 2. ATURAN PRIORITAS: Jika ditemukan status IZIN / SAKIT / CUTI / DINAS LUAR
+                    // PRIORITAS OVERRIDE: DINAS LUAR / IZIN / SAKIT / CUTI menimpa status HADIR
                     if (status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI' || isSudahIzinDiDB) {
                         riwayatHarian[key].izinSakit = 1;
-                        // Abaikan / me-reset jam masuk & pulang jika ada status Izin/Sakit/Cuti/DL
                         riwayatHarian[key].datang = null;
                         riwayatHarian[key].pulang = null;
                     } else if (riwayatHarian[key].izinSakit === 0) {
-                        // Hanya catat jam MASUK / PULANG jika TIDAK ada status Izin/Sakit/Cuti/DL
+                        // Catat jam MASUK / PULANG hanya jika TIDAK berstatus Izin/Sakit/DL/Cuti
                         if (status === 'MASUK' || status === 'DATANG') {
                             if (riwayatHarian[key].datang === null || jam < riwayatHarian[key].datang) {
                                 riwayatHarian[key].datang = jam;
@@ -2086,8 +2095,36 @@ function periksaBackupOtomatis() {
                     google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
                     google.script.run.simpanLogHarianKeSheet(dummyLogHarian);
                 }
+
                 renderRekapAbsen(document.getElementById('content-area'));
-                Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis (Tanggal masa depan telah disaring).', 'success');
+
+                // Notifikasi Popup Peringatan NIP Tidak Terdaftar
+                if (asnTidakTerdaftar.length > 0) {
+                    let listHtml = asnTidakTerdaftar.map(x => 
+                        `<div class="border-b border-slate-200 py-1.5 text-left text-xs">
+                            <p class="font-bold text-slate-800">${x.nama}</p>
+                            <p class="text-slate-500 font-mono">NIP: ${x.nip} | ${x.sekolah}</p>
+                        </div>`
+                    ).join('');
+
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Sebagian Data Dibatalkan',
+                        html: `
+                            <div class="text-xs text-slate-700 mb-2 text-left">
+                                <b>PERINGATAN:</b> Terdapat <b>${asnTidakTerdaftar.length} ASN</b> pada file yang <b>TIDAK DIBACA</b> karena NIP tidak terdaftar di Master Data Pegawai:
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 rounded p-2 max-h-48 overflow-y-auto">
+                                ${listHtml}
+                            </div>
+                            <p class="text-[11px] text-red-600 mt-2 text-left">* Silakan tambahkan ASN tersebut ke Master Data Pegawai terlebih dahulu.</p>
+                        `,
+                        confirmButtonText: 'Saya Mengerti',
+                        confirmButtonColor: '#f59e0b'
+                    });
+                } else {
+                    Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
+                }
             }
         } catch(err) {
             Swal.fire('Error', 'Gagal memproses file log CSV.', 'error');
