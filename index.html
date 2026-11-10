@@ -1944,31 +1944,39 @@ function periksaBackupOtomatis() {
 
                     let key = nipPegawai + "_" + tanggal;
 
+                    // 1. CEK DATABASE: Apakah di database sudah ada status Izin/Sakit/Cuti/DL sebelumnya?
+                    let cleanNipCheck = String(nipPegawai).replace(/['\s]/g, '');
+                    let logEksis = dummyLogHarian.find(l => String(l.nip).replace(/['\s]/g, '') === cleanNipCheck && l.tanggalStr === tanggal);
+                    let isSudahIzinDiDB = logEksis && (parseInt(logEksis.izinSakit) > 0);
+
                     if (!riwayatHarian[key]) {
                         riwayatHarian[key] = {
                             nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah, tanggal: tanggal,
-                            datang: null, pulang: null, izinSakit: 0
+                            datang: null, pulang: null, izinSakit: isSudahIzinDiDB ? 1 : 0
                         };
                     }
 
-                    if (status === 'MASUK' || status === 'DATANG') {
-                        if (riwayatHarian[key].datang === null) {
-                            riwayatHarian[key].datang = jam;
-                        } else if (jam < riwayatHarian[key].datang) {
-                            riwayatHarian[key].datang = jam;
-                        }
-                    } else if (status === 'PULANG') {
-                        if (riwayatHarian[key].pulang === null) {
-                            riwayatHarian[key].pulang = jam;
-                        } else if (jam > riwayatHarian[key].pulang) {
-                            riwayatHarian[key].pulang = jam;
-                        }
-                    } else if ((status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI') && riwayatHarian[key].izinSakit === 0) {
+                    // 2. ATURAN PRIORITAS: Jika ditemukan status IZIN / SAKIT / CUTI / DINAS LUAR
+                    if (status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI' || isSudahIzinDiDB) {
                         riwayatHarian[key].izinSakit = 1;
+                        // Abaikan / me-reset jam masuk & pulang jika ada status Izin/Sakit/Cuti/DL
+                        riwayatHarian[key].datang = null;
+                        riwayatHarian[key].pulang = null;
+                    } else if (riwayatHarian[key].izinSakit === 0) {
+                        // Hanya catat jam MASUK / PULANG jika TIDAK ada status Izin/Sakit/Cuti/DL
+                        if (status === 'MASUK' || status === 'DATANG') {
+                            if (riwayatHarian[key].datang === null || jam < riwayatHarian[key].datang) {
+                                riwayatHarian[key].datang = jam;
+                            }
+                        } else if (status === 'PULANG') {
+                            if (riwayatHarian[key].pulang === null || jam > riwayatHarian[key].pulang) {
+                                riwayatHarian[key].pulang = jam;
+                            }
+                        }
                     }
                 });
 
-                // Hitung frekuensi lupa absen dalam sebulan per NIP
+                // Hitung frekuensi lupa absen dalam sebulan per NIP (hanya untuk yang TIDAK Izin/Sakit/Cuti/DL)
                 let hitungLupaAbsen = {};
                 Object.values(riwayatHarian).forEach(rec => {
                     if (rec.izinSakit === 0) {
