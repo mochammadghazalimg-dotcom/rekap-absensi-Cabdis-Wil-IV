@@ -1939,31 +1939,43 @@ function periksaBackupOtomatis() {
                     }
 
                     if (nipPegawai === '-' || nipPegawai === '' || !tanggal) return;
+
                     // --- 1. VALIDASI NIP ASN (Cek Master Pegawai) ---
                     let cleanNipCheck = String(nipPegawai).replace(/['\s]/g, '');
                     let pegEksis = dummyPegawai.find(p => String(p.nip).replace(/['\s]/g, '') === cleanNipCheck);
 
                     if (!pegEksis) {
-                        // Jika NIP tidak terdaftar di Master Pegawai, catat ke daftar tidak terdaftar lalu lewati
                         if (!asnTidakTerdaftar.some(x => String(x.nip).replace(/['\s]/g, '') === cleanNipCheck)) {
                             asnTidakTerdaftar.push({ nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah });
                         }
                         return; // Abaikan data absensi ini
                     }
-                    // FILTER KEAMANAN TANGGAL: Cek apakah tanggal log melebihi hari ini
+
+                    // FILTER KEAMANAN TANGGAL
                     let tglCheck = parseTanggalLog(tanggal);
                     let logDateObj = new Date(tglCheck.yyyy, tglCheck.mm - 1, tglCheck.dd);
                     
-                    // Jika log berasal dari tanggal di masa depan (melebihi hari ini), lewati!
                     if (logDateObj > today) {
                         return; 
                     }
 
                     let key = nipPegawai + "_" + tanggal;
 
-                    // Cek apakah di DB log harian sudah ada status Izin/Sakit/Cuti/DL sebelumnya
-                    let logEksis = dummyLogHarian.find(l => String(l.nip).replace(/['\s]/g, '') === cleanNipCheck && l.tanggalStr === tanggal);
-                    let isSudahIzinDiDB = logEksis && (parseInt(logEksis.izinSakit) > 0);
+                    // Cek data eksis di DB berdasarkan NIP, Hari, Bulan, dan Tahun (menggunakan tglCheck)
+                    let logEksis = dummyLogHarian.find(l => {
+                        let cleanNipLog = String(l.nip || l.NIP || '').replace(/['\s]/g, '');
+                        let lYear = parseInt(l.yyyy || l.Tahun || 0);
+                        if (lYear < 100) lYear += 2000;
+                        let lMonth = parseInt(l.mm || l.Bulan || 0);
+                        let lDay = parseInt(l.dd || l.Hari || 0);
+
+                        return cleanNipLog === cleanNipCheck && 
+                               lDay === tglCheck.dd && 
+                               lMonth === tglCheck.mm && 
+                               lYear === tglCheck.yyyy;
+                    });
+
+                    let isSudahIzinDiDB = logEksis && (parseInt(logEksis.izinSakit || logEksis.Izin_Sakit_DL || 0) > 0);
 
                     if (!riwayatHarian[key]) {
                         riwayatHarian[key] = {
@@ -1978,7 +1990,6 @@ function periksaBackupOtomatis() {
                         riwayatHarian[key].datang = null;
                         riwayatHarian[key].pulang = null;
                     } else if (riwayatHarian[key].izinSakit === 0) {
-                        // Catat jam MASUK / PULANG hanya jika TIDAK berstatus Izin/Sakit/DL/Cuti
                         if (status === 'MASUK' || status === 'DATANG') {
                             if (riwayatHarian[key].datang === null || jam < riwayatHarian[key].datang) {
                                 riwayatHarian[key].datang = jam;
@@ -1991,7 +2002,7 @@ function periksaBackupOtomatis() {
                     }
                 });
 
-                // Hitung frekuensi lupa absen dalam sebulan per NIP (hanya untuk yang TIDAK Izin/Sakit/Cuti/DL)
+                // Hitung frekuensi lupa absen dalam sebulan per NIP
                 let hitungLupaAbsen = {};
                 Object.values(riwayatHarian).forEach(rec => {
                     if (rec.izinSakit === 0) {
@@ -2007,7 +2018,7 @@ function periksaBackupOtomatis() {
                     }
                 });
 
-                // Reset hitungan dummyAbsensi dari nol sebelum kalkulasi ulang log
+                // Reset hitungan dummyAbsensi sebelum rekap ulang
                 dummyAbsensi.forEach(a => {
                     a.hadir = 0;
                     a.terlambatMin = 0;
@@ -2015,7 +2026,7 @@ function periksaBackupOtomatis() {
                     a.izinSakit = 0;
                 });
 
-                // Hitung menit keterlambatan & cepat pulang
+                // Hitung keterlambatan & cepat pulang
                 Object.values(riwayatHarian).forEach(record => {
                     let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
 
@@ -2053,7 +2064,20 @@ function periksaBackupOtomatis() {
                     let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
                     let namaSekolahFinal = matchSekolah ? matchSekolah.nama : record.sekolah;
 
-                    let existingIndex = dummyLogHarian.findIndex(l => String(l.nip).replace(/['\s]/g, '') === String(record.nip).replace(/['\s]/g, '') && l.tanggalStr === record.tanggal);
+                    // Pencarian Indeks Log Eksis berdasarkan Hari, Bulan, dan Tahun
+                    let cleanRecNip = String(record.nip).replace(/['\s]/g, '');
+                    let existingIndex = dummyLogHarian.findIndex(l => {
+                        let cleanNipLog = String(l.nip || l.NIP || '').replace(/['\s]/g, '');
+                        let lYear = parseInt(l.yyyy || l.Tahun || 0);
+                        if (lYear < 100) lYear += 2000;
+                        let lMonth = parseInt(l.mm || l.Bulan || 0);
+                        let lDay = parseInt(l.dd || l.Hari || 0);
+
+                        return cleanNipLog === cleanRecNip && 
+                               lDay === dd && 
+                               lMonth === mm && 
+                               lYear === yyyy;
+                    });
 
                     let logData = {
                         nip: record.nip, nama: record.nama, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
@@ -2098,7 +2122,6 @@ function periksaBackupOtomatis() {
 
                 renderRekapAbsen(document.getElementById('content-area'));
 
-                // Notifikasi Popup Peringatan NIP Tidak Terdaftar
                 if (asnTidakTerdaftar.length > 0) {
                     let listHtml = asnTidakTerdaftar.map(x => 
                         `<div class="border-b border-slate-200 py-1.5 text-left text-xs">
