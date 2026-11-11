@@ -523,14 +523,18 @@ function periksaBackupOtomatis() {
                     return logNipClean === pNipClean && parseInt(l.mm) === bulan && lYear === tahun;
                 });
 
-                let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                let totHadir = 0, totTelat = 0, totCepat = 0;
+                let totIzin = 0, totCuti = 0, totSakit = 0, totDL = 0;
 
                 if (logsBulanIni.length > 0) {
                     logsBulanIni.forEach(log => {
                         totHadir += (parseInt(log.hadir) || 0);
                         totTelat += (parseInt(log.terlambatMin) || 0);
                         totCepat += (parseInt(log.cepatPulangMin) || 0);
-                        totIzin += (parseInt(log.izinSakit) || 0);
+                        totIzin += (parseInt(log.izin) || 0);
+                        totCuti += (parseInt(log.cuti) || 0);
+                        totSakit += (parseInt(log.sakit) || 0);
+                        totDL += (parseInt(log.dinasLuar) || 0);
                     });
                 } else {
                     let matchAbsen = dummyAbsensi.find(a => String(a.nip || '').replace(/['\s]/g, '') === pNipClean);
@@ -538,11 +542,15 @@ function periksaBackupOtomatis() {
                         totHadir = parseInt(matchAbsen.hadir) || 0;
                         totTelat = parseInt(matchAbsen.terlambatMin) || 0;
                         totCepat = parseInt(matchAbsen.cepatPulangMin) || 0;
-                        totIzin = parseInt(matchAbsen.izinSakit) || 0;
+                        totIzin = parseInt(matchAbsen.izin) || 0;
+                        totCuti = parseInt(matchAbsen.cuti) || 0;
+                        totSakit = parseInt(matchAbsen.sakit) || 0;
+                        totDL = parseInt(matchAbsen.dinasLuar) || 0;
                     }
                 }
 
-                let tk = hkOtomatis - (totHadir + totIzin);
+                let totalTercatat = totHadir + totIzin + totCuti + totSakit + totDL;
+                let tk = hkOtomatis - totalTercatat;
                 if (tk < 0) tk = 0;
 
                 let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((p.sekolah || '').toUpperCase()));
@@ -1718,16 +1726,19 @@ function periksaBackupOtomatis() {
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="bg-slate-800 text-white text-sm">
-                                    <th class="p-3 text-center w-12">No</th>
+                                <tr class="bg-slate-800 text-white text-xs uppercase">
+                                    <th class="p-3 text-center w-10">No</th>
                                     <th class="p-3">Nama Pegawai</th>
                                     <th class="p-3">NIP</th>
                                     <th class="p-3">Sekolah</th>
                                     <th class="p-3 text-center bg-indigo-600">Hari Kerja</th>
                                     <th class="p-3 text-center bg-blue-700">Hadir</th>
-                                    <th class="p-3 text-center bg-orange-600">Keterlambatan</th>
+                                    <th class="p-3 text-center bg-orange-600">Terlambat</th>
                                     <th class="p-3 text-center bg-yellow-600">Cepat Pulang</th>
-                                    <th class="p-3 text-center bg-emerald-600">Izin/Sakit/Dinas Luar</th>
+                                    <th class="p-3 text-center bg-emerald-600">Izin</th>
+                                    <th class="p-3 text-center bg-teal-600">Cuti</th>
+                                    <th class="p-3 text-center bg-purple-600">Sakit</th>
+                                    <th class="p-3 text-center bg-cyan-600">Dinas Luar</th>
                                     <th class="p-3 text-center bg-red-600">Tanpa Ket.</th>
                                 </tr>
                             </thead>
@@ -1776,37 +1787,37 @@ function periksaBackupOtomatis() {
 
             if (isHarian) {
                 let targetDay = parseInt(filterTglVal);
-                
                 dataTampil = dummyPegawai.map(peg => {
                     let pegNipClean = String(peg.nip || '').replace(/['\s]/g, '');
                     let logMatch = dummyLogHarian.find(l => {
                         let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
                         let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
-                        return logNipClean === pegNipClean && 
-                              parseInt(l.dd) === targetDay && 
-                              parseInt(l.mm) === filterBlnVal && 
-                              lYear === filterThnVal;
+                        return logNipClean === pegNipClean && parseInt(l.dd) === targetDay && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
                     });
 
                     let hadirVal = logMatch ? (logMatch.hadir || 0) : 0;
-                    let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
-                    let telatVal = logMatch ? (logMatch.terlambatMin || 0) : 0;
-                    let cptVal = logMatch ? (logMatch.cepatPulangMin || 0) : 0;
-                    let alpaVal = (hadirVal === 0 && izinVal === 0) ? 1 : 0;
+                    let izVal = logMatch ? (logMatch.izin || 0) : 0;
+                    let ctVal = logMatch ? (logMatch.cuti || 0) : 0;
+                    let skVal = logMatch ? (logMatch.sakit || 0) : 0;
+                    let dlVal = logMatch ? (logMatch.dinasLuar || 0) : 0;
+                    let totalKet = hadirVal + izVal + ctVal + skVal + dlVal;
+                    let alpaVal = (totalKet === 0) ? 1 : 0;
 
                     let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
-                    let idSekolahVal = matchSekolah ? matchSekolah.id : "ALL";
 
                     return {
                         nama: peg.nama,
                         nip: peg.nip,
                         sekolah: peg.sekolah,
-                        sekolahId: idSekolahVal,
+                        sekolahId: matchSekolah ? matchSekolah.id : "ALL",
                         hariKerja: 1,
                         hadir: hadirVal,
-                        terlambatMin: telatVal,
-                        cepatPulangMin: cptVal,
-                        izinSakit: izinVal,
+                        terlambatMin: logMatch ? (logMatch.terlambatMin || 0) : 0,
+                        cepatPulangMin: logMatch ? (logMatch.cepatPulangMin || 0) : 0,
+                        izin: izVal,
+                        cuti: ctVal,
+                        sakit: skVal,
+                        dinasLuar: dlVal,
                         tanpaKet: alpaVal
                     };
                 });
@@ -1816,26 +1827,30 @@ function periksaBackupOtomatis() {
                     let logsBulanIni = dummyLogHarian.filter(l => {
                         let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
                         let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
-                        return logNipClean === pNipClean && 
-                              parseInt(l.mm) === filterBlnVal && 
-                              lYear === filterThnVal;
+                        return logNipClean === pNipClean && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
                     });
 
-                    let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+                    let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
                     logsBulanIni.forEach(log => {
                         totHadir += (parseInt(log.hadir) || 0);
                         totTelat += (parseInt(log.terlambatMin) || 0);
                         totCepat += (parseInt(log.cepatPulangMin) || 0);
-                        totIzin += (parseInt(log.izinSakit) || 0);
+                        totIz += (parseInt(log.izin) || 0);
+                        totCt += (parseInt(log.cuti) || 0);
+                        totSk += (parseInt(log.sakit) || 0);
+                        totDl += (parseInt(log.dinasLuar) || 0);
                     });
 
                     p.hadir = totHadir;
                     p.terlambatMin = totTelat;
                     p.cepatPulangMin = totCepat;
-                    p.izinSakit = totIzin;
+                    p.izin = totIz;
+                    p.cuti = totCt;
+                    p.sakit = totSk;
+                    p.dinasLuar = totDl;
                     p.hariKerja = hkOtomatis;
-                    
-                    let totalTercatat = totHadir + totIzin; 
+            
+                    let totalTercatat = totHadir + totIz + totCt + totSk + totDl; 
                     p.tanpaKet = hkOtomatis - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -1869,7 +1884,10 @@ function periksaBackupOtomatis() {
                     <td class="p-3 text-center font-bold text-blue-600">${a.hadir || 0}</td>
                     <td class="p-3 text-center font-bold text-orange-600">${a.terlambatMin || 0} Mnt</td>
                     <td class="p-3 text-center font-bold text-yellow-600">${a.cepatPulangMin || 0} Mnt</td>
-                    <td class="p-3 text-center font-bold text-emerald-600">${a.izinSakit || 0}</td>
+                    <td class="p-3 text-center font-bold text-emerald-600">${a.izin || 0}</td>
+                    <td class="p-3 text-center font-bold text-teal-600">${a.cuti || 0}</td>
+                    <td class="p-3 text-center font-bold text-purple-600">${a.sakit || 0}</td>
+                    <td class="p-3 text-center font-bold text-cyan-600">${a.dinasLuar || 0}</td>
                     <td class="p-3 text-center font-bold text-red-600">${a.tanpaKet || 0}</td>
                 </tr>`
             }).join('');
@@ -1983,21 +2001,30 @@ function periksaBackupOtomatis() {
                                lYear === tglCheck.yyyy;
                     });
 
-                    let isSudahIzinDiDB = logEksis && (parseInt(logEksis.izinSakit || logEksis.Izin_Sakit_DL || 0) > 0);
+                    let izDB = logEksis ? (parseInt(logEksis.izin || 0)) : 0;
+                    let ctDB = logEksis ? (parseInt(logEksis.cuti || 0)) : 0;
+                    let skDB = logEksis ? (parseInt(logEksis.sakit || 0)) : 0;
+                    let dlDB = logEksis ? (parseInt(logEksis.dinasLuar || 0)) : 0;
 
                     if (!riwayatHarian[key]) {
                         riwayatHarian[key] = {
                             nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah, tanggal: tanggal,
-                            datang: null, pulang: null, izinSakit: isSudahIzinDiDB ? 1 : 0
+                            datang: null, pulang: null, 
+                            izin: izDB, cuti: ctDB, sakit: skDB, dinasLuar: dlDB
                         };
                     }
 
-                    // PRIORITAS OVERRIDE: DINAS LUAR / IZIN / SAKIT / CUTI menimpa status HADIR
-                    if (status === 'IZIN' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'CUTI' || isSudahIzinDiDB) {
-                        riwayatHarian[key].izinSakit = 1;
+                    if (status === 'IZIN') riwayatHarian[key].izin = 1;
+                    else if (status === 'CUTI') riwayatHarian[key].cuti = 1;
+                    else if (status === 'SAKIT') riwayatHarian[key].sakit = 1;
+                    else if (status === 'DINAS LUAR' || status === 'DL') riwayatHarian[key].dinasLuar = 1;
+
+                    let hasKeterangan = (riwayatHarian[key].izin > 0 || riwayatHarian[key].cuti > 0 || riwayatHarian[key].sakit > 0 || riwayatHarian[key].dinasLuar > 0);
+
+                    if (hasKeterangan) {
                         riwayatHarian[key].datang = null;
                         riwayatHarian[key].pulang = null;
-                    } else if (riwayatHarian[key].izinSakit === 0) {
+                    } else {
                         if (status === 'MASUK' || status === 'DATANG') {
                             if (riwayatHarian[key].datang === null || jam < riwayatHarian[key].datang) {
                                 riwayatHarian[key].datang = jam;
@@ -2031,14 +2058,18 @@ function periksaBackupOtomatis() {
                     a.hadir = 0;
                     a.terlambatMin = 0;
                     a.cepatPulangMin = 0;
-                    a.izinSakit = 0;
+                    a.izin = 0;
+                    a.cuti = 0;
+                    a.sakit = 0;
+                    a.dinasLuar = 0;
                 });
 
                 // Hitung keterlambatan & cepat pulang
                 Object.values(riwayatHarian).forEach(record => {
                     let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
+                    let isAdaKet = (record.izin > 0 || record.cuti > 0 || record.sakit > 0 || record.dinasLuar > 0);
 
-                    if (record.izinSakit > 0) {
+                    if (isAdaKet) {
                         hadirBaru = 0; terlambatBaru = 0; cptPulangBaru = 0;
                     } else if (record.datang !== null || record.pulang !== null) {
                         hadirBaru = 1;
@@ -2090,7 +2121,8 @@ function periksaBackupOtomatis() {
                     let logData = {
                         nip: record.nip, nama: record.nama, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
                         tanggalStr: record.tanggal, yyyy: yyyy, mm: mm, dd: dd,
-                        hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit
+                        hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru,
+                        izin: record.izin || 0, cuti: record.cuti || 0, sakit: record.sakit || 0, dinasLuar: record.dinasLuar || 0
                     };
 
                     if (existingIndex !== -1) {
@@ -2104,12 +2136,16 @@ function periksaBackupOtomatis() {
                         dummyAbsensi[indexPegawai].hadir += hadirBaru;
                         dummyAbsensi[indexPegawai].terlambatMin += terlambatBaru;
                         dummyAbsensi[indexPegawai].cepatPulangMin += cptPulangBaru;
-                        dummyAbsensi[indexPegawai].izinSakit += record.izinSakit;
+                        dummyAbsensi[indexPegawai].izin += (record.izin || 0);
+                        dummyAbsensi[indexPegawai].cuti += (record.cuti || 0);
+                        dummyAbsensi[indexPegawai].sakit += (record.sakit || 0);
+                        dummyAbsensi[indexPegawai].dinasLuar += (record.dinasLuar || 0);
                     } else {
                         dummyAbsensi.push({
                             id: Date.now() + Math.random(),
                             nama: record.nama, nip: record.nip, sekolah: namaSekolahFinal, sekolahId: idSekolahVal,
-                            hariKerja: 22, hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru, izinSakit: record.izinSakit, tanpaKet: 0
+                            hariKerja: 22, hadir: hadirBaru, terlambatMin: terlambatBaru, cepatPulangMin: cptPulangBaru,
+                            izin: record.izin || 0, cuti: record.cuti || 0, sakit: record.sakit || 0, dinasLuar: record.dinasLuar || 0, tanpaKet: 0
                         });
                     }
                 });
@@ -2118,7 +2154,7 @@ function periksaBackupOtomatis() {
 
                 dummyAbsensi.forEach(p => {
                     p.hariKerja = hkOtomatis;
-                    let totalTercatat = p.hadir + p.izinSakit;
+                    let totalTercatat = p.hadir + (p.izin || 0) + (p.cuti || 0) + (p.sakit || 0) + (p.dinasLuar || 0);
                     p.tanpaKet = p.hariKerja - totalTercatat;
                     if (p.tanpaKet < 0) p.tanpaKet = 0;
                 });
@@ -2305,16 +2341,19 @@ function periksaBackupOtomatis() {
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="bg-red-600 text-white text-sm">
-                                    <th class="p-3 text-center w-12">No</th>
+                                <tr class="bg-red-600 text-white text-xs uppercase">
+                                    <th class="p-3 text-center w-10">No</th>
                                     <th class="p-3">Nama Pegawai</th>
                                     <th class="p-3">NIP</th>
                                     <th class="p-3">Sekolah</th>
                                     <th class="p-3 text-center">Hari Kerja</th>
                                     <th class="p-3 text-center">Hadir</th>
-                                    <th class="p-3 text-center">Keterlambatan</th>
+                                    <th class="p-3 text-center">Terlambat</th>
                                     <th class="p-3 text-center">Cepat Pulang</th>
-                                    <th class="p-3 text-center">Izin/Sakit/Dinas Luar</th>
+                                    <th class="p-3 text-center">Izin</th>
+                                    <th class="p-3 text-center">Cuti</th>
+                                    <th class="p-3 text-center">Sakit</th>
+                                    <th class="p-3 text-center">DL</th>
                                     <th class="p-3 text-center bg-red-800">Tanpa Ket.</th>
                                 </tr>
                             </thead>
@@ -2386,8 +2425,8 @@ function periksaBackupOtomatis() {
 
             dummyAbsensi.forEach(p => {
                 p.hariKerja = hkOtomatis;
-                let totalTercatat = (parseInt(p.hadir) || 0);
-                p.tanpaKet = hkOtomatis - totalTercatat;
+                let totTercatat = (parseInt(p.hadir) || 0) + (parseInt(p.izin) || 0) + (parseInt(p.cuti) || 0) + (parseInt(p.sakit) || 0) + (parseInt(p.dinasLuar) || 0);
+                p.tanpaKet = hkOtomatis - totTercatat;
                 if (p.tanpaKet < 0) p.tanpaKet = 0;
             });
 
@@ -2403,7 +2442,7 @@ function periksaBackupOtomatis() {
             });
 
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-500 font-medium">Tidak ada pegawai yang memiliki Tanpa Keterangan pada periode ${namaBulan[selectedMonth - 1]} ${selectedYear}. Semua hadir/izin penuh.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="p-6 text-center text-slate-500 font-medium">Tidak ada pegawai yang memiliki Tanpa Keterangan pada periode ${namaBulan[selectedMonth - 1]} ${selectedYear}. Semua hadir/izin/cuti/sakit/DL penuh.</td></tr>`;
                 if (pagContainer) pagContainer.innerHTML = '';
                 return;
             }
@@ -2412,7 +2451,7 @@ function periksaBackupOtomatis() {
             let totalPages = Math.ceil(filtered.length / limit);
             if (page < 1) page = 1;
             if (page > totalPages) page = totalPages;
-            
+    
             let startIndex = (page - 1) * limit;
             let paginated = filtered.slice(startIndex, startIndex + limit);
 
@@ -2426,7 +2465,10 @@ function periksaBackupOtomatis() {
                     <td class="p-3 text-center font-bold text-blue-600">${a.hadir || 0}</td>
                     <td class="p-3 text-center text-orange-600 font-semibold">${a.terlambatMin || 0} Mnt</td>
                     <td class="p-3 text-center text-yellow-600 font-semibold">${a.cepatPulangMin || 0} Mnt</td>
-                    <td class="p-3 text-center text-emerald-600 font-semibold">${a.izinSakit || 0}</td>
+                    <td class="p-3 text-center text-emerald-600 font-semibold">${a.izin || 0}</td>
+                    <td class="p-3 text-center text-teal-600 font-semibold">${a.cuti || 0}</td>
+                    <td class="p-3 text-center text-purple-600 font-semibold">${a.sakit || 0}</td>
+                    <td class="p-3 text-center text-cyan-600 font-semibold">${a.dinasLuar || 0}</td>
                     <td class="p-3 text-center text-red-700 font-extrabold bg-red-100/80">${a.tanpaKet || 0} Hari</td>
                 </tr>
             `).join('');
