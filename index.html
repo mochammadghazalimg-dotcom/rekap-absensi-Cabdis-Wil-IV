@@ -2089,7 +2089,7 @@ function periksaBackupOtomatis() {
                         if (record.pulang !== null) {
                             let [jamP, mntP] = record.pulang.split(':').map(Number);
                             let totalPulangMnt = (jamP * 60) + mntP;
-                            let batasPulangMnt = (16 * 60);
+                            let batasPulangMnt = (15 * 60);
                             cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
                         } else { 
                             cptPulangBaru = countLupaPulang >= 5 ? 480 : 120; 
