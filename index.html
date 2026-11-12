@@ -2399,7 +2399,7 @@ function periksaBackupOtomatis() {
                         </button>
                     </div>
                     <div class="text-xs text-slate-500 font-medium">
-                        <i class="fa-solid fa-circle-info text-red-500 mr-1"></i> Menampilkan ASN dengan <b>Tanpa Keterangan &ge; 1 Hari</b> (Urut Terbanyak)
+                        <i class="fa-solid fa-circle-info text-red-500 mr-1"></i> Sumber: <b>Sheet Rekap_Absen</b> | Menampilkan ASN dengan <b>Tanpa Keterangan &ge; 1 Hari</b> (Urut Terbanyak)
                     </div>
                 </div>
 
@@ -2470,9 +2470,31 @@ function periksaBackupOtomatis() {
             document.body.removeChild(link);
         }
 
-        function terapkanFilterIndisipliner(page = 1) {
-            sinkronkanMasterKeAbsensi();
+        function terapkanFilterIndisipliner(page = 1, skipFetch = false) {
+            const tbody = document.getElementById('bodyIndisipliner');
+            if (!tbody) return;
 
+            // Tarik data terbaru langsung dari Spreadsheet sheet Rekap_Absen
+            if (!skipFetch && typeof google !== 'undefined' && google.script && google.script.run) {
+                tbody.innerHTML = `<tr><td colspan="13" class="p-6 text-center text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin text-red-600 mr-2"></i> Menarik data terbaru dari sheet <b>Rekap_Absen</b>...</td></tr>`;
+                google.script.run
+                    .withSuccessHandler(function(db) {
+                        if (db && Array.isArray(db.absensi)) {
+                            dummyAbsensi = db.absensi;
+                        }
+                        renderTabelIndisiplinerDariRekap(page);
+                    })
+                    .withFailureHandler(function() {
+                        renderTabelIndisiplinerDariRekap(page);
+                    })
+                    .ambilSemuaDataFromSheet();
+                return;
+            }
+
+            renderTabelIndisiplinerDariRekap(page);
+        }
+
+        function renderTabelIndisiplinerDariRekap(page = 1) {
             const elBulan = document.getElementById('filterBulanIndisipliner');
             const elTahun = document.getElementById('filterTahunIndisipliner');
             const tbody = document.getElementById('bodyIndisipliner');
@@ -2490,18 +2512,10 @@ function periksaBackupOtomatis() {
             ];
 
             if (labelPeriode) {
-                labelPeriode.innerText = `Periode: ${namaBulan[selectedMonth - 1]} ${selectedYear}`;
+                labelPeriode.innerText = `Periode: ${namaBulan[selectedMonth - 1]} ${selectedYear} (Sheet Rekap_Absen)`;
             }
 
-            let hkOtomatis = hitungHariKerjaBulanIni(selectedYear, selectedMonth);
-
-            dummyAbsensi.forEach(p => {
-                p.hariKerja = hkOtomatis;
-                let totTercatat = (parseInt(p.hadir) || 0) + (parseInt(p.izin) || 0) + (parseInt(p.cuti) || 0) + (parseInt(p.sakit) || 0) + (parseInt(p.dinasLuar) || 0);
-                p.tanpaKet = hkOtomatis - totTercatat;
-                if (p.tanpaKet < 0) p.tanpaKet = 0;
-            });
-
+            // Saring ASN dari sheet Rekap_Absen yang memiliki Tanpa Keterangan >= 1 (0 tidak tampil)
             let filtered = dummyAbsensi.filter(a => (parseInt(a.tanpaKet) || 0) >= 1);
 
             filtered.sort((a, b) => {
@@ -2514,7 +2528,7 @@ function periksaBackupOtomatis() {
             });
 
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="13" class="p-6 text-center text-slate-500 font-medium">Tidak ada pegawai yang memiliki Tanpa Keterangan pada periode ${namaBulan[selectedMonth - 1]} ${selectedYear}. Semua hadir/izin/cuti/sakit/DL penuh.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="p-6 text-center text-slate-500 font-medium">Tidak ada ASN pada sheet <b>Rekap_Absen</b> yang memiliki Tanpa Keterangan.</td></tr>`;
                 if (pagContainer) pagContainer.innerHTML = '';
                 return;
             }
@@ -2523,7 +2537,7 @@ function periksaBackupOtomatis() {
             let totalPages = Math.ceil(filtered.length / limit);
             if (page < 1) page = 1;
             if (page > totalPages) page = totalPages;
-    
+
             let startIndex = (page - 1) * limit;
             let paginated = filtered.slice(startIndex, startIndex + limit);
 
@@ -2533,7 +2547,7 @@ function periksaBackupOtomatis() {
                     <td class="p-3 font-semibold text-slate-800">${a.nama}</td>
                     <td class="p-3 text-slate-500 font-mono text-xs">${a.nip}</td>
                     <td class="p-3 text-slate-600">${a.sekolah || '-'}</td>
-                    <td class="p-3 text-center font-bold text-indigo-600 bg-indigo-50/50">${hkOtomatis} Hari</td>
+                    <td class="p-3 text-center font-bold text-indigo-600 bg-indigo-50/50">${a.hariKerja || 0} Hari</td>
                     <td class="p-3 text-center font-bold text-blue-600">${a.hadir || 0}</td>
                     <td class="p-3 text-center text-orange-600 font-semibold">${a.terlambatMin || 0} Mnt</td>
                     <td class="p-3 text-center text-yellow-600 font-semibold">${a.cepatPulangMin || 0} Mnt</td>
@@ -2549,7 +2563,7 @@ function periksaBackupOtomatis() {
                 let paginationHtml = '';
                 if (totalPages > 1) {
                     for (let p = 1; p <= totalPages; p++) {
-                        paginationHtml += `<button onclick="terapkanFilterIndisipliner(${p})" class="px-3 py-1 rounded text-sm font-semibold transition-all ${p === page ? 'bg-red-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${p}</button>`;
+                        paginationHtml += `<button onclick="terapkanFilterIndisipliner(${p}, true)" class="px-3 py-1 rounded text-sm font-semibold transition-all ${p === page ? 'bg-red-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${p}</button>`;
                     }
                 }
                 pagContainer.innerHTML = paginationHtml;
@@ -2561,33 +2575,27 @@ function periksaBackupOtomatis() {
             const filterThnVal = document.getElementById('filterTahunIndisipliner') ? parseInt(document.getElementById('filterTahunIndisipliner').value) : new Date().getFullYear();
             
             let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-            let hkOtomatis = hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
-            
-            let dataIndisipliner = [];
-            dummyAbsensi.forEach(p => {
-                let logsBulanIni = dummyLogHarian.filter(l => String(l.nip).trim() === String(p.nip).trim() && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal);
-                let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
-                
-                logsBulanIni.forEach(log => {
-                    totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
-                    totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
-                });
+            let dataIndisipliner = dummyAbsensi
+                .filter(p => (parseInt(p.tanpaKet) || 0) >= 1)
+                .map(p => ({
+                    nama: p.nama,
+                    nip: "'" + String(p.nip || '').replace(/['\s]/g, ''),
+                    sekolah: p.sekolah || '-',
+                    hariKerja: parseInt(p.hariKerja) || 0,
+                    hadir: parseInt(p.hadir) || 0,
+                    terlambatMin: parseInt(p.terlambatMin) || 0,
+                    cepatPulangMin: parseInt(p.cepatPulangMin) || 0,
+                    izin: parseInt(p.izin) || 0,
+                    cuti: parseInt(p.cuti) || 0,
+                    sakit: parseInt(p.sakit) || 0,
+                    dinasLuar: parseInt(p.dinasLuar) || 0,
+                    tanpaKet: parseInt(p.tanpaKet) || 0
+                }));
 
-                let tk = hkOtomatis - (totHadir + totIzin);
-                if (tk < 0) tk = 0;
-                
-                if (tk >= 1) {
-                    dataIndisipliner.push({
-                        nama: p.nama, nip: p.nip, sekolah: p.sekolah || '-', hariKerja: hkOtomatis,
-                        hadir: totHadir, terlambatMin: totTelat, cepatPulangMin: totCepat, izinSakit: totIzin, tanpaKet: tk
-                    });
-                }
-            });
-
-            dataIndisipliner.sort((a, b) => b.tanpaKet - a.tanpaKet); 
+            dataIndisipliner.sort((a, b) => b.tanpaKet - a.tanpaKet || b.terlambatMin - a.terlambatMin); 
 
             if(dataIndisipliner.length === 0) {
-                Swal.fire('Kosong', 'Tidak ada data indisipliner untuk bulan ini.', 'warning');
+                Swal.fire('Kosong', 'Tidak ada data ASN dengan Tanpa Keterangan pada sheet Rekap_Absen.', 'warning');
                 return;
             }
 
@@ -2600,7 +2608,10 @@ function periksaBackupOtomatis() {
                 'Hadir': a.hadir,
                 'Keterlambatan (Mnt)': a.terlambatMin,
                 'Cepat Pulang (Mnt)': a.cepatPulangMin,
-                'Izin/Sakit/DL': a.izinSakit,
+                'Izin': a.izin,
+                'Cuti': a.cuti,
+                'Sakit': a.sakit,
+                'Dinas Luar': a.dinasLuar,
                 'Tanpa Keterangan': a.tanpaKet
             }));
 
@@ -2957,7 +2968,7 @@ function renderHapusPresensi(container) {
     `;
 }
 
-function cariDataUntukHapus() {
+function cariDataUntukHapus(page = 1) {
     let idSekolah = document.getElementById('hapusSekolahFilter').value;
     let tglVal = document.getElementById('hapusTglFilter').value;
     let blnVal = document.getElementById('hapusBlnFilter').value;
@@ -2988,14 +2999,26 @@ function cariDataUntukHapus() {
         ? `Seluruh Bulan ${namaBulanArr[blnVal - 1]} ${thnVal}` 
         : `Tanggal ${tglVal} ${namaBulanArr[blnVal - 1]} ${thnVal}`;
 
-    let rowsPreview = logDitemukan.slice(0, 50).map((l, index) => {
+    // Pengaturan Pagination 50 Data per Halaman
+    let limit = 50;
+    let totalData = logDitemukan.length;
+    let totalPages = Math.ceil(totalData / limit);
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+
+    let startIndex = (page - 1) * limit;
+    let endIndex = Math.min(startIndex + limit, totalData);
+    let paginatedLogs = logDitemukan.slice(startIndex, endIndex);
+
+    let rowsPreview = paginatedLogs.map((l, index) => {
         let ddStr = String(l.dd || 1).padStart(2, '0');
         let mmStr = String(l.mm || 1).padStart(2, '0');
         let tglStr = `${ddStr}/${mmStr}/${l.yyyy}`;
+        let totalKetLain = (parseInt(l.izin) || 0) + (parseInt(l.cuti) || 0) + (parseInt(l.sakit) || 0) + (parseInt(l.dinasLuar) || 0) || (parseInt(l.izinSakit) || 0);
 
         return `
             <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
-                <td class="p-2 text-center text-slate-500 font-semibold">${index + 1}</td>
+                <td class="p-2 text-center text-slate-500 font-semibold">${startIndex + index + 1}</td>
                 <td class="p-2 font-mono font-semibold text-slate-700">${tglStr}</td>
                 <td class="p-2 font-semibold text-slate-800">${l.nama}</td>
                 <td class="p-2 font-mono text-slate-500">${l.nip}</td>
@@ -3003,20 +3026,69 @@ function cariDataUntukHapus() {
                 <td class="p-2 text-center font-bold text-blue-600">${l.hadir || 0}</td>
                 <td class="p-2 text-center text-orange-600 font-semibold">${l.terlambatMin || 0}m</td>
                 <td class="p-2 text-center text-yellow-600 font-semibold">${l.cepatPulangMin || 0}m</td>
-                <td class="p-2 text-center text-emerald-600 font-semibold">${l.izinSakit || 0}</td>
+                <td class="p-2 text-center text-emerald-600 font-semibold">${totalKetLain}</td>
             </tr>
         `;
     }).join('');
 
-    let sisaDataTeks = logDitemukan.length > 50 ? `<p class="text-xs text-slate-400 mt-2 text-center"><i>Menampilkan 50 data pertama dari total ${logDitemukan.length} data log log presensi.</i></p>` : '';
+    // Buat Navigasi Halaman (Page 1: 1-50, Page 2: 51-100, dst.)
+    let paginationHtml = '';
+    if (totalPages > 1) {
+        let pageButtons = '';
+        let startPage = Math.max(1, page - 2);
+        let endPage = Math.min(totalPages, page + 2);
+
+        if (startPage > 1) {
+            pageButtons += `<button onclick="cariDataUntukHapus(1)" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">1</button>`;
+            if (startPage > 2) pageButtons += `<span class="px-1 text-slate-400 text-xs">...</span>`;
+        }
+
+        for (let p = startPage; p <= endPage; p++) {
+            pageButtons += `<button onclick="cariDataUntukHapus(${p})" class="px-3 py-1.5 rounded text-xs font-bold transition-all ${p === page ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">${p}</button>`;
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) pageButtons += `<span class="px-1 text-slate-400 text-xs">...</span>`;
+            pageButtons += `<button onclick="cariDataUntukHapus(${totalPages})" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">${totalPages}</button>`;
+        }
+
+        let jumpOptions = '';
+        for (let p = 1; p <= totalPages; p++) {
+            let rStart = (p - 1) * limit + 1;
+            let rEnd = Math.min(p * limit, totalData);
+            jumpOptions += `<option value="${p}" ${p === page ? 'selected' : ''}>Page ${p} (No. ${rStart} - ${rEnd})</option>`;
+        }
+
+        paginationHtml = `
+            <div class="mt-4 pt-4 border-t border-slate-200 flex flex-wrap justify-between items-center gap-3">
+                <p class="text-xs text-slate-500">
+                    Menampilkan data ke <b>${startIndex + 1} s.d. ${endIndex}</b> dari total <b>${totalData}</b> data log presensi (Halaman <b>${page}</b> dari <b>${totalPages}</b>).
+                </p>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button onclick="cariDataUntukHapus(${page - 1})" ${page === 1 ? 'disabled' : ''} class="px-3 py-1.5 rounded text-xs font-semibold border border-slate-300 ${page === 1 ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'bg-white text-slate-700 hover:bg-slate-100'}">
+                        &laquo; Sebelumnya
+                    </button>
+                    ${pageButtons}
+                    <button onclick="cariDataUntukHapus(${page + 1})" ${page === totalPages ? 'disabled' : ''} class="px-3 py-1.5 rounded text-xs font-semibold border border-slate-300 ${page === totalPages ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'bg-white text-slate-700 hover:bg-slate-100'}">
+                        Selanjutnya &raquo;
+                    </button>
+                    <select onchange="cariDataUntukHapus(parseInt(this.value))" class="ml-2 p-1.5 border border-slate-300 rounded text-xs font-semibold bg-white text-slate-700">
+                        ${jumpOptions}
+                    </select>
+                </div>
+            </div>
+        `;
+    } else {
+        paginationHtml = `<p class="text-xs text-slate-400 mt-3 text-center"><i>Menampilkan seluruh <b>${totalData}</b> data log presensi (Halaman 1 dari 1).</i></p>`;
+    }
 
     areaHasil.innerHTML = `
         <div class="flex flex-wrap justify-between items-center mb-4 gap-4 p-4 bg-red-50/70 border border-red-200 rounded-xl">
             <div>
                 <p class="text-xs text-red-600 font-bold uppercase tracking-wider">Target Penghapusan Data Log</p>
-                <h4 class="text-base font-extrabold text-slate-800 mt-0.5">${filterLabel} (${logDitemukan.length} Record Log)</h4>
+                <h4 class="text-base font-extrabold text-slate-800 mt-0.5">${filterLabel} (${totalData} Record Log)</h4>
             </div>
-            <button onclick="konfirmasiHapusPresensi('${tglVal}', '${blnVal}', '${thnVal}', '${idSekolah}', ${logDitemukan.length})" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 transition-all">
+            <button onclick="konfirmasiHapusPresensi('${tglVal}', '${blnVal}', '${thnVal}', '${idSekolah}', ${totalData})" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-trash-arrow-up"></i> HAPUS SEKARANG
             </button>
         </div>
@@ -3025,7 +3097,7 @@ function cariDataUntukHapus() {
             <table class="w-full text-left border-collapse bg-white">
                 <thead>
                     <tr class="bg-slate-800 text-white text-xs uppercase font-bold">
-                        <th class="p-2 text-center w-10">No</th>
+                        <th class="p-2 text-center w-12">No</th>
                         <th class="p-2">Tanggal</th>
                         <th class="p-2">Nama Pegawai</th>
                         <th class="p-2">NIP</th>
@@ -3033,13 +3105,13 @@ function cariDataUntukHapus() {
                         <th class="p-2 text-center">Hadir</th>
                         <th class="p-2 text-center">Terlambat</th>
                         <th class="p-2 text-center">Cepat Pulang</th>
-                        <th class="p-2 text-center">Izin/Sakit</th>
+                        <th class="p-2 text-center">Izin/Cuti/Sakit/DL</th>
                     </tr>
                 </thead>
                 <tbody>${rowsPreview}</tbody>
             </table>
         </div>
-        ${sisaDataTeks}
+        ${paginationHtml}
     `;
 }
 
