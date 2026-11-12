@@ -2787,16 +2787,31 @@ function cariDataUntukEdit() {
                     <input type="number" id="editHadir_${index}" value="${l.hadir || 0}" min="0" max="1" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-blue-600 focus:outline-blue-500">
                 </td>
                 <td class="p-3 text-center">
-                    <input type="number" id="editTerlambat_${index}" value="${l.terlambatMin || 0}" min="0" class="w-20 p-1 border border-slate-300 rounded text-center font-bold text-orange-600 focus:outline-orange-500">
+                    <input type="number" id="editHadir_${index}" value="${l.hadir || 0}" min="0" max="1" oninput="aturStatusEdit(${index}, 'hadir')" class="w-14 p-1 border border-slate-300 rounded text-center font-bold text-blue-600">
                 </td>
                 <td class="p-3 text-center">
-                    <input type="number" id="editCepatPulang_${index}" value="${l.cepatPulangMin || 0}" min="0" class="w-20 p-1 border border-slate-300 rounded text-center font-bold text-yellow-600 focus:outline-yellow-500">
+                    <input type="number" id="editTerlambat_${index}" value="${l.terlambatMin || 0}" min="0" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-orange-600">
                 </td>
                 <td class="p-3 text-center">
-                    <input type="number" id="editIzinSakit_${index}" value="${l.izinSakit || 0}" min="0" max="1" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-emerald-600 focus:outline-emerald-500">
+                    <input type="number" id="editCepatPulang_${index}" value="${l.cepatPulangMin || 0}" min="0" class="w-16 p-1 border border-slate-300 rounded text-center font-bold text-yellow-600">
                 </td>
                 <td class="p-3 text-center">
-                    <button onclick="konfirmasiSimpanEdit('${l.nip}', '${l.tanggalStr}', ${index}, '${l.nama}', '${l.sekolah}')" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow flex items-center gap-1 mx-auto">
+                    <input type="number" id="editIzin_${index}" value="${l.izin || l.izinSakit || 0}" min="0" max="1" oninput="aturStatusEdit(${index}, 'izin')" class="w-14 p-1 border border-slate-300 rounded text-center font-bold text-emerald-600">
+                </td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editCuti_${index}" value="${l.cuti || 0}" min="0" max="1" oninput="aturStatusEdit(${index}, 'cuti')" class="w-14 p-1 border border-slate-300 rounded text-center font-bold text-teal-600">
+                </td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editSakit_${index}" value="${l.sakit || 0}" min="0" max="1" oninput="aturStatusEdit(${index}, 'sakit')" class="w-14 p-1 border border-slate-300 rounded text-center font-bold text-purple-600">
+                </td>
+                <td class="p-3 text-center">
+                    <input type="number" id="editDinasLuar_${index}" value="${l.dinasLuar || 0}" min="0" max="1" oninput="aturStatusEdit(${index}, 'dl')" class="w-14 p-1 border border-slate-300 rounded text-center font-bold text-cyan-600">
+                </td>
+                <td class="p-3 text-center bg-red-50/60">
+                    <input type="number" id="editTanpaKet_${index}" value="${((parseInt(l.hadir)||0)+(parseInt(l.izin||l.izinSakit)||0)+(parseInt(l.cuti)||0)+(parseInt(l.sakit)||0)+(parseInt(l.dinasLuar)||0))===0 ? 1 : 0}" min="0" max="1" oninput="aturStatusEdit(${index}, 'tk')" class="w-14 p-1 border border-red-300 rounded text-center font-bold text-red-600">
+                </td>
+                <td class="p-3 text-center">
+                    <button onclick="konfirmasiSimpanEdit('${l.nip}', '${l.tanggalStr || ''}|${l.dd}|${l.mm}|${yyyyStr}', ${index}, '${String(l.nama||'').replace(/'/g, "\\'")}', '${String(l.sekolah||'-').replace(/'/g, "\\'")}')" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow flex items-center gap-1 mx-auto">
                         <i class="fa-solid fa-floppy-disk"></i> Simpan
                     </button>
                 </td>
@@ -2815,8 +2830,12 @@ function cariDataUntukEdit() {
                         <th class="p-3 text-center bg-blue-700">Hadir</th>
                         <th class="p-3 text-center bg-orange-600">Terlambat (Mnt)</th>
                         <th class="p-3 text-center bg-yellow-600">Cepat Pulang (Mnt)</th>
-                        <th class="p-3 text-center bg-emerald-600">Izin/Sakit</th>
-                        <th class="p-3 text-center bg-red-600">Aksi</th>
+                        <th class="p-3 text-center bg-emerald-600">Izin</th>
+                        <th class="p-3 text-center bg-teal-600">Cuti</th>
+                        <th class="p-3 text-center bg-purple-600">Sakit</th>
+                        <th class="p-3 text-center bg-cyan-600">Dinas Luar</th>
+                        <th class="p-3 text-center bg-red-600">Tanpa Ket.</th>
+                        <th class="p-3 text-center bg-slate-700">Aksi</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -2825,11 +2844,35 @@ function cariDataUntukEdit() {
     `;
 }
 
+function aturStatusEdit(index, tipe) {
+    const ids = { hadir: 'editHadir_', izin: 'editIzin_', cuti: 'editCuti_', sakit: 'editSakit_', dl: 'editDinasLuar_', tk: 'editTanpaKet_' };
+    const elAktif = document.getElementById(ids[tipe] + index);
+    let val = Math.max(0, Math.min(1, parseInt(elAktif.value) || 0));
+    elAktif.value = val;
+
+    if (val === 1) {
+        Object.entries(ids).forEach(([k, prefix]) => { if (k !== tipe) document.getElementById(prefix + index).value = 0; });
+        if (tipe !== 'hadir') {
+            document.getElementById('editTerlambat_' + index).value = 0;
+            document.getElementById('editCepatPulang_' + index).value = 0;
+        }
+    }
+    let sum = ['hadir', 'izin', 'cuti', 'sakit', 'dl'].reduce((t, k) => t + (parseInt(document.getElementById(ids[k] + index).value) || 0), 0);
+    document.getElementById('editTanpaKet_' + index).value = (sum === 0) ? 1 : 0;
+}
+
 function konfirmasiSimpanEdit(nip, tanggalStr, index, nama, sekolah) {
-    let valHadir = parseInt(document.getElementById('editHadir_' + index).value) || 0;
-    let valTerlambat = parseInt(document.getElementById('editTerlambat_' + index).value) || 0;
-    let valCepat = parseInt(document.getElementById('editCepatPulang_' + index).value) || 0;
-    let valIzin = parseInt(document.getElementById('editIzinSakit_' + index).value) || 0;
+    aturStatusEdit(index, 'tk');
+    let dataEdit = {
+        hadir: parseInt(document.getElementById('editHadir_' + index).value) || 0,
+        terlambat: parseInt(document.getElementById('editTerlambat_' + index).value) || 0,
+        cepat: parseInt(document.getElementById('editCepatPulang_' + index).value) || 0,
+        izin: parseInt(document.getElementById('editIzin_' + index).value) || 0,
+        cuti: parseInt(document.getElementById('editCuti_' + index).value) || 0,
+        sakit: parseInt(document.getElementById('editSakit_' + index).value) || 0,
+        dl: parseInt(document.getElementById('editDinasLuar_' + index).value) || 0,
+        tk: parseInt(document.getElementById('editTanpaKet_' + index).value) || 0
+    };
 
     let namaUpper = String(nama).toUpperCase();
     let sekolahUpper = String(sekolah).toUpperCase();
@@ -2914,7 +2957,7 @@ function konfirmasiSimpanEdit(nip, tanggalStr, index, nama, sekolah) {
         }
     }).then((result) => {
         if (result.isConfirmed) {
-            prosesSimpanEditAbsen(nip, tanggalStr, valHadir, valTerlambat, valCepat, valIzin);
+            prosesSimpanEditAbsen(nip, tanggalStr, dataEdit);
         }
     });
 }
@@ -3384,33 +3427,51 @@ function downloadExcelAbsenInternal(sekolahFilter = "ALL") {
     XLSX.writeFile(wb, namaFile);
 }
 
-function prosesSimpanEditAbsen(nip, tanggalStr, valHadir, valTerlambat, valCepat, valIzin) {
+function prosesSimpanEditAbsen(nip, tanggalStr, dataEdit) {
     let cleanNip = String(nip).replace(/['\s]/g, '');
-    let logIndex = dummyLogHarian.findIndex(l => String(l.nip).replace(/['\s]/g, '') === cleanNip && l.tanggalStr === tanggalStr);
-    
+    let [tglAsli, dd, mm, yyyy] = String(tanggalStr).split('|');
+    let logIndex = dummyLogHarian.findIndex(l => {
+        let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
+        return String(l.nip || '').replace(/['\s]/g, '') === cleanNip && parseInt(l.dd) === parseInt(dd) && parseInt(l.mm) === parseInt(mm) && lYear === parseInt(yyyy);
+    });
+
     if (logIndex !== -1) {
-        let oldLog = dummyLogHarian[logIndex];
-        
-        let diffHadir = valHadir - (parseInt(oldLog.hadir) || 0);
-        let diffTerlambat = valTerlambat - (parseInt(oldLog.terlambatMin) || 0);
-        let diffCepat = valCepat - (parseInt(oldLog.cepatPulangMin) || 0);
-        let diffIzin = valIzin - (parseInt(oldLog.izinSakit) || 0);
+        dummyLogHarian[logIndex].hadir = dataEdit.hadir;
+        dummyLogHarian[logIndex].terlambatMin = dataEdit.terlambat;
+        dummyLogHarian[logIndex].cepatPulangMin = dataEdit.cepat;
+        dummyLogHarian[logIndex].izin = dataEdit.izin;
+        dummyLogHarian[logIndex].cuti = dataEdit.cuti;
+        dummyLogHarian[logIndex].sakit = dataEdit.sakit;
+        dummyLogHarian[logIndex].dinasLuar = dataEdit.dl;
+    } else {
+        let pegMaster = dummyPegawai.find(p => String(p.nip || '').replace(/['\s]/g, '') === cleanNip);
+        let matchSek = dummySekolah.find(s => s.nama.toUpperCase().includes(((pegMaster?.sekolah) || '').toUpperCase()));
+        dummyLogHarian.push({
+            nip: pegMaster ? pegMaster.nip : nip, nama: pegMaster ? pegMaster.nama : '-',
+            sekolah: pegMaster ? pegMaster.sekolah : '-', sekolahId: matchSek ? matchSek.id : "ALL",
+            tanggalStr: tglAsli || `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`,
+            yyyy: parseInt(yyyy), mm: parseInt(mm), dd: parseInt(dd),
+            hadir: dataEdit.hadir, terlambatMin: dataEdit.terlambat, cepatPulangMin: dataEdit.cepat,
+            izin: dataEdit.izin, cuti: dataEdit.cuti, sakit: dataEdit.sakit, dinasLuar: dataEdit.dl
+        });
+    }
 
-        dummyLogHarian[logIndex].hadir = valHadir;
-        dummyLogHarian[logIndex].terlambatMin = valTerlambat;
-        dummyLogHarian[logIndex].cepatPulangMin = valCepat;
-        dummyLogHarian[logIndex].izinSakit = valIzin;
-
-        let absenIndex = dummyAbsensi.findIndex(p => String(p.nip).replace(/['\s]/g, '') === cleanNip);
+    if (true) {
+        let now = new Date();
+        let hkBerjalan = hitungHariKerjaBulanIni(now.getFullYear(), now.getMonth() + 1, now.getDate());
+        let absenIndex = dummyAbsensi.findIndex(p => String(p.nip || '').replace(/['\s]/g, '') === cleanNip);
         if (absenIndex !== -1) {
-            dummyAbsensi[absenIndex].hadir += diffHadir;
-            dummyAbsensi[absenIndex].terlambatMin += diffTerlambat;
-            dummyAbsensi[absenIndex].cepatPulangMin += diffCepat;
-            dummyAbsensi[absenIndex].izinSakit += diffIzin;
-            
-            let totalTercatat = dummyAbsensi[absenIndex].hadir + dummyAbsensi[absenIndex].izinSakit;
-            dummyAbsensi[absenIndex].tanpaKet = dummyAbsensi[absenIndex].hariKerja - totalTercatat;
-            if(dummyAbsensi[absenIndex].tanpaKet < 0) dummyAbsensi[absenIndex].tanpaKet = 0;
+            let logsBln = dummyLogHarian.filter(l => String(l.nip || '').replace(/['\s]/g, '') === cleanNip && parseInt(l.mm) === (now.getMonth() + 1));
+            dummyAbsensi[absenIndex].hariKerja = hkBerjalan;
+            dummyAbsensi[absenIndex].hadir = logsBln.reduce((s, x) => s + (parseInt(x.hadir) || 0), 0);
+            dummyAbsensi[absenIndex].terlambatMin = logsBln.reduce((s, x) => s + (parseInt(x.terlambatMin) || 0), 0);
+            dummyAbsensi[absenIndex].cepatPulangMin = logsBln.reduce((s, x) => s + (parseInt(x.cepatPulangMin) || 0), 0);
+            dummyAbsensi[absenIndex].izin = logsBln.reduce((s, x) => s + (parseInt(x.izin) || 0), 0);
+            dummyAbsensi[absenIndex].cuti = logsBln.reduce((s, x) => s + (parseInt(x.cuti) || 0), 0);
+            dummyAbsensi[absenIndex].sakit = logsBln.reduce((s, x) => s + (parseInt(x.sakit) || 0), 0);
+            dummyAbsensi[absenIndex].dinasLuar = logsBln.reduce((s, x) => s + (parseInt(x.dinasLuar) || 0), 0);
+            let tercatat = dummyAbsensi[absenIndex].hadir + dummyAbsensi[absenIndex].izin + dummyAbsensi[absenIndex].cuti + dummyAbsensi[absenIndex].sakit + dummyAbsensi[absenIndex].dinasLuar;
+            dummyAbsensi[absenIndex].tanpaKet = Math.max(0, hkBerjalan - tercatat);
         }
 
         if (typeof google !== 'undefined' && google.script && google.script.run) {
