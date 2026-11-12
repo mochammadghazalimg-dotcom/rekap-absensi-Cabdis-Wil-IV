@@ -2278,86 +2278,9 @@ function periksaBackupOtomatis() {
 }
 
         function downloadExcelAbsen() {
-            const filterTglVal = document.getElementById('filterTanggalAbsen') ? document.getElementById('filterTanggalAbsen').value : "ALL";
-            const filterBlnVal = document.getElementById('filterBulanAbsen') ? parseInt(document.getElementById('filterBulanAbsen').value) : (new Date().getMonth() + 1);
-            const filterThnVal = document.getElementById('filterTahunAbsen') ? parseInt(document.getElementById('filterTahunAbsen').value) : new Date().getFullYear();
-
-            let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-            let isHarian = (filterTglVal !== "ALL");
-            let hkOtomatis = isHarian ? 1 : hitungHariKerjaBulanIni(filterThnVal, filterBlnVal);
-            
-            let dataTampil = [];
-            if (isHarian) {
-                let targetDay = parseInt(filterTglVal);
-                dataTampil = dummyPegawai.map(peg => {
-                    let logMatch = dummyLogHarian.find(l => 
-                        String(l.nip).trim() === String(peg.nip).trim() && 
-                        parseInt(l.dd) === targetDay && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal
-                    );
-                    let hadirVal = logMatch ? (logMatch.hadir || 0) : 0;
-                    let izinVal = logMatch ? (logMatch.izinSakit || 0) : 0;
-                    return {
-                        nama: peg.nama, nip: peg.nip, sekolah: peg.sekolah || '-',
-                        hariKerja: 1, hadir: hadirVal, terlambatMin: logMatch ? (logMatch.terlambatMin || 0) : 0, 
-                        cepatPulangMin: logMatch ? (logMatch.cepatPulangMin || 0) : 0, izinSakit: izinVal, tanpaKet: (hadirVal === 0 && izinVal === 0) ? 1 : 0
-                    };
-                });
-            } else {
-                dummyAbsensi.forEach(p => {
-                    let logsBulanIni = dummyLogHarian.filter(l => String(l.nip).trim() === String(p.nip).trim() && parseInt(l.mm) === filterBlnVal && parseInt(l.yyyy) === filterThnVal);
-                    let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
-                    logsBulanIni.forEach(log => {
-                        totHadir += (parseInt(log.hadir) || 0); totTelat += (parseInt(log.terlambatMin) || 0);
-                        totCepat += (parseInt(log.cepatPulangMin) || 0); totIzin += (parseInt(log.izinSakit) || 0);
-                    });
-                    
-                    p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat; p.izinSakit = totIzin; p.hariKerja = hkOtomatis;
-                    let tk = hkOtomatis - (totHadir + totIzin); p.tanpaKet = tk < 0 ? 0 : tk;
-                });
-                dataTampil = dummyAbsensi;
-            }
-
-            if(dataTampil.length === 0) {
-                Swal.fire('Kosong', 'Tidak ada data rekap untuk di-export.', 'warning');
-                return;
-            }
-
-            let dataExport = dataTampil.map((a, i) => ({
-                'No': i + 1,
-                'Nama Pegawai': a.nama,
-                'NIP': a.nip,
-                'Sekolah': a.sekolah,
-                'Hari Kerja': a.hariKerja,
-                'Hadir': a.hadir,
-                'Keterlambatan (Mnt)': a.terlambatMin,
-                'Cepat Pulang (Mnt)': a.cepatPulangMin,
-                'Izin/Sakit/DL': a.izinSakit,
-                'Tanpa Keterangan': a.tanpaKet
-            }));
-
-            let today = new Date();
-            let dateStr = today.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
-            
-            dataExport.push({}); 
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': `.................., ${dateStr}` });
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Mengetahui,' });
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'Kepala Sekolah' });
-            dataExport.push({}); dataExport.push({}); dataExport.push({}); 
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NAMA' });
-            dataExport.push({ 'Izin/Sakit/DL': '', 'Tanpa Keterangan': 'NIP. ....................' });
-
-            let namaFile = isHarian 
-                ? `Rekap_Semua_Sekolah_Harian_${filterTglVal}_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`
-                : `Rekap_Semua_Sekolah_Bulanan_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
-
-            let ws = XLSX.utils.json_to_sheet(dataExport);
-            ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
-
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Rekap Keseluruhan");
-            XLSX.writeFile(wb, namaFile);
+            downloadExcelAbsenInternal("ALL");
         }
-
+            
         function renderLaporan(container) {
             if(!container) return;
             
@@ -3323,14 +3246,20 @@ function downloadExcelAbsenInternal(sekolahFilter = "ALL") {
             });
 
             let hadirVal = logMatch ? (parseInt(logMatch.hadir) || 0) : 0;
-            let izinVal = logMatch ? (parseInt(logMatch.izinSakit) || 0) : 0;
+            let izVal = logMatch ? (parseInt(logMatch.izin) || 0) : 0;
+            let ctVal = logMatch ? (parseInt(logMatch.cuti) || 0) : 0;
+            let skVal = logMatch ? (parseInt(logMatch.sakit) || 0) : 0;
+            let dlVal = logMatch ? (parseInt(logMatch.dinasLuar) || 0) : 0;
+            let totalKet = hadirVal + izVal + ctVal + skVal + dlVal;
             let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
 
             return {
                 nama: peg.nama, nip: peg.nip, sekolah: peg.sekolah || '-',
                 sekolahId: matchSekolah ? matchSekolah.id : "ALL",
                 hariKerja: 1, hadir: hadirVal, terlambatMin: logMatch ? (parseInt(logMatch.terlambatMin) || 0) : 0, 
-                cepatPulangMin: logMatch ? (parseInt(logMatch.cepatPulangMin) || 0) : 0, izinSakit: izinVal, tanpaKet: (hadirVal === 0 && izinVal === 0) ? 1 : 0
+                cepatPulangMin: logMatch ? (parseInt(logMatch.cepatPulangMin) || 0) : 0,
+                izin: izVal, cuti: ctVal, sakit: skVal, dinasLuar: dlVal,
+                tanpaKet: (totalKet === 0) ? 1 : 0
             };
         });
     } else {
@@ -3342,16 +3271,20 @@ function downloadExcelAbsenInternal(sekolahFilter = "ALL") {
                 return logNipClean === pNipClean && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
             });
 
-            let totHadir = 0, totTelat = 0, totCepat = 0, totIzin = 0;
+            let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
             logsBulanIni.forEach(log => {
                 totHadir += (parseInt(log.hadir) || 0);
                 totTelat += (parseInt(log.terlambatMin) || 0);
                 totCepat += (parseInt(log.cepatPulangMin) || 0);
-                totIzin += (parseInt(log.izinSakit) || 0);
+                totIz += (parseInt(log.izin) || 0);
+                totCt += (parseInt(log.cuti) || 0);
+                totSk += (parseInt(log.sakit) || 0);
+                totDl += (parseInt(log.dinasLuar) || 0);
             });
             
-            p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat; p.izinSakit = totIzin; p.hariKerja = hkOtomatis;
-            let tk = hkOtomatis - (totHadir + totIzin); p.tanpaKet = tk < 0 ? 0 : tk;
+            p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat;
+            p.izin = totIz; p.cuti = totCt; p.sakit = totSk; p.dinasLuar = totDl; p.hariKerja = hkOtomatis;
+            let tk = hkOtomatis - (totHadir + totIz + totCt + totSk + totDl); p.tanpaKet = tk < 0 ? 0 : tk;
         });
         dataTampil = [...dummyAbsensi];
     }
@@ -3380,8 +3313,11 @@ function downloadExcelAbsenInternal(sekolahFilter = "ALL") {
         'Hadir': a.hadir,
         'Keterlambatan (Mnt)': a.terlambatMin,
         'Cepat Pulang (Mnt)': a.cepatPulangMin,
-        'Izin/Sakit/DL': a.izinSakit,
-        'Tanpa Keterangan': a.tanpaKet
+        'Izin': a.izin || 0,
+        'Cuti': a.cuti || 0,
+        'Sakit': a.sakit || 0,
+        'Dinas Luar': a.dinasLuar || 0,
+        'Tanpa Keterangan': a.tanpaKet || 0
     }));
 
     let today = new Date();
@@ -3401,7 +3337,7 @@ function downloadExcelAbsenInternal(sekolahFilter = "ALL") {
         : `Rekap_${nmSekolahFile}_Bulanan_${namaBulan[filterBlnVal - 1]}_${filterThnVal}.xlsx`;
 
     let ws = XLSX.utils.json_to_sheet(dataExport);
-    ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 25}];
+    ws['!cols'] = [{wch: 5}, {wch: 35}, {wch: 25}, {wch: 30}, {wch: 12}, {wch: 10}, {wch: 18}, {wch: 18}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 14}, {wch: 25}];
 
     let wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
