@@ -45,8 +45,11 @@ function ambilSemuaDataFromSheet() {
           hadir: parseInt(row[4]) || 0, 
           terlambatMin: parseInt(row[5]) || 0,
           cepatPulangMin: parseInt(row[6]) || 0, 
-          izinSakit: parseInt(row[7]) || 0, 
-          tanpaKet: parseInt(row[8]) || 0
+          izin: parseInt(row[7]) || 0,
+          cuti: parseInt(row[8]) || 0,
+          sakit: parseInt(row[9]) || 0,
+          dinasLuar: parseInt(row[10]) || 0,
+          tanpaKet: parseInt(row[11]) || 0
         }));
       }
     }
@@ -73,12 +76,11 @@ function ambilSemuaDataFromSheet() {
       if (raw.length > 1) {
         raw.shift();
         dataLogHarian = raw.filter(row => row[0]).map(row => {
-          let yr = parseInt(row[3]) || 0; // Kolom D: Tahun
+          let yr = parseInt(row[3]) || 0;
           if (yr > 0 && yr < 100) yr += 2000;
-          let mm = parseInt(row[4]) || 0; // Kolom E: Bulan
-          let dd = parseInt(row[5]) || 0; // Kolom F: Hari
+          let mm = parseInt(row[4]) || 0;
+          let dd = parseInt(row[5]) || 0;
           
-          // Generate string tanggal otomatis untuk kebutuhan internal aplikasi web
           let mmStr = String(mm).padStart(2, '0');
           let ddStr = String(dd).padStart(2, '0');
           let tglStr = `${yr}-${mmStr}-${ddStr}`;
@@ -94,7 +96,10 @@ function ambilSemuaDataFromSheet() {
             hadir: parseInt(row[6]) || 0, 
             terlambatMin: parseInt(row[7]) || 0, 
             cepatPulangMin: parseInt(row[8]) || 0, 
-            izinSakit: parseInt(row[9]) || 0
+            izin: parseInt(row[9]) || 0,
+            cuti: parseInt(row[10]) || 0,
+            sakit: parseInt(row[11]) || 0,
+            dinasLuar: parseInt(row[12]) || 0
           };
         });
       }
@@ -309,14 +314,27 @@ function simpanRekapAbsenKeSheet(listAbsensi) {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     let sheet = ss.getSheetByName('Rekap_Absen') || ss.getSheetByName('Rekap Absensi') || ss.insertSheet('Rekap_Absen');
     sheet.clearContents();
-    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Hari_Kerja', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL', 'Tanpa_Ket']];
+    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Hari_Kerja', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin', 'Cuti', 'Sakit', 'Dinas_Luar', 'Tanpa_Ket']];
     if (listAbsensi && listAbsensi.length > 0) {
       listAbsensi.forEach(a => {
         let cleanNip = String(a.nip || '').replace(/['\s]/g, '');
-        rows.push(["'" + cleanNip, a.nama, a.sekolah, a.hariKerja || 0, a.hadir, a.terlambatMin, a.cepatPulangMin, a.izinSakit, a.tanpaKet]);
+        rows.push([
+          "'" + cleanNip, 
+          a.nama, 
+          a.sekolah, 
+          a.hariKerja || 0, 
+          a.hadir || 0, 
+          a.terlambatMin || 0, 
+          a.cepatPulangMin || 0, 
+          a.izin || 0,
+          a.cuti || 0,
+          a.sakit || 0,
+          a.dinasLuar || 0,
+          a.tanpaKet || 0
+        ]);
       });
     }
-    sheet.getRange(1, 1, rows.length, 9).setValues(rows);
+    sheet.getRange(1, 1, rows.length, 12).setValues(rows);
     return "OK";
   } catch(e) { return "Error: " + e.message; }
 }
@@ -327,8 +345,7 @@ function simpanLogHarianKeSheet(listLog) {
     let sheet = ss.getSheetByName('Log_Harian') || ss.insertSheet('Log_Harian');
     sheet.clearContents();
     
-    // Header Baru (10 Kolom tanpa kolom 'Tanggal')
-    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin_Sakit_DL']];
+    let rows = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Tahun', 'Bulan', 'Hari', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin', 'Cuti', 'Sakit', 'Dinas_Luar']];
     
     if (listLog && listLog.length > 0) {
       listLog.forEach(l => {
@@ -343,15 +360,18 @@ function simpanLogHarianKeSheet(listLog) {
           yr, 
           l.mm, 
           l.dd, 
-          l.hadir, 
-          l.terlambatMin, 
-          l.cepatPulangMin, 
-          l.izinSakit
+          l.hadir || 0, 
+          l.terlambatMin || 0, 
+          l.cepatPulangMin || 0, 
+          l.izin || 0,
+          l.cuti || 0,
+          l.sakit || 0,
+          l.dinasLuar || 0
         ]);
       });
     }
     
-    sheet.getRange(1, 1, rows.length, 10).setValues(rows);
+    sheet.getRange(1, 1, rows.length, 13).setValues(rows);
     return "OK";
   } catch(e) { return "Error: " + e.message; }
 }
