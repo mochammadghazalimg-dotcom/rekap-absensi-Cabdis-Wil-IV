@@ -1380,9 +1380,12 @@ function periksaBackupOtomatis() {
         cancelButtonText: 'Batal'
     }).then((res) => {
         if(res.isConfirmed) {
-            dummyPegawai = dummyPegawai.filter(x => String(x.nip).trim() !== String(nip).trim());
+            let cleanNipHapus = String(nip).replace(/['\s]/g, '');
+            dummyPegawai = dummyPegawai.filter(x => String(x.nip).replace(/['\s]/g, '') !== cleanNipHapus);
+            dummyAbsensi = dummyAbsensi.filter(a => String(a.nip).replace(/['\s]/g, '') !== cleanNipHapus);
             if (typeof google !== 'undefined' && google.script && google.script.run) {
                 google.script.run.simpanDataPegawaiKeSheet(dummyPegawai);
+                google.script.run.simpanRekapAbsenKeSheet(dummyAbsensi);
             }
             renderDataPegawai(document.getElementById('content-area'));
             
@@ -1498,7 +1501,17 @@ function periksaBackupOtomatis() {
             let tglMutasiObj = new Date(result.value.tglMutasi);
             tglMutasiObj.setHours(0,0,0,0);
 
-            // 1. UPDATE MASTER DATA PEGAWAI DENGAN SEKOLAH BARU
+            // 1. CATAT RIWAYAT MUTASI & UPDATE MASTER DATA PEGAWAI DENGAN SEKOLAH BARU
+            let pNipMutasi = String(p.nip).replace(/['\s]/g, '');
+            let riwayatMutasi = JSON.parse(localStorage.getItem('cabdin_riwayat_mutasi') || '[]');
+            riwayatMutasi.push({
+                nip: pNipMutasi,
+                nama: p.nama,
+                sekolahLama: sekolahLama,
+                sekolahBaru: sekolahBaru,
+                tglMutasi: result.value.tglMutasi
+            });
+            localStorage.setItem('cabdin_riwayat_mutasi', JSON.stringify(riwayatMutasi));
             p.sekolah = sekolahBaru;
 
             // 2. DISIPLIN LOG HARIAN: PERBARUI SEKOLAH HANYA UNTUK TANGGAL >= TANGGAL MUTASI
@@ -1618,6 +1631,11 @@ function periksaBackupOtomatis() {
             let tahunSekarang = new Date().getFullYear();
             let bulanSekarang = new Date().getMonth() + 1; 
             let hariKerjaAktual = hitungHariKerjaBulanIni(tahunSekarang, bulanSekarang);
+
+            if (dummyPegawai.length > 0) {
+                let validNips = new Set(dummyPegawai.map(p => String(p.nip || '').replace(/['\s]/g, '')));
+                dummyAbsensi = dummyAbsensi.filter(a => validNips.has(String(a.nip || '').replace(/['\s]/g, '')));
+            }
 
             dummyPegawai.forEach(peg => {
                 let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
@@ -1750,6 +1768,156 @@ function periksaBackupOtomatis() {
             terapkanFilterAbsen();
         }
 
+        function hitungHariKerjaRentang(year, month, startDay, endDay) {
+            if (endDay < startDay) return 0;
+            let total = 0;
+            for (let d = startDay; d <= endDay; d++) {
+                let dateObj = new Date(year, month - 1, d);
+                let dayOfWeek = dateObj.getDay();
+                let dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                if (dayOfWeek !== 0 && dayOfWeek !== 6 && !LIBUR_NASIONAL.includes(dateStr)) total++;
+            }
+            return total;
+        }
+
+        function ambilDataRekapTerfilter(filterTglVal, filterBlnVal, filterThnVal) {
+            let isHarian = (filterTglVal !== "ALL");
+            let now = new Date();
+            let isBulanBerjalan = (filterBlnVal === (now.getMonth() + 1) && filterThnVal === now.getFullYear());
+            let lastDayMonth = new Date(filterThnVal, filterBlnVal, 0).getDate();
+            let maxDay = isBulanBerjalan ? Math.min(now.getDate(), lastDayMonth) : lastDayMonth;
+
+            let semuaMutasi = JSON.parse(localStorage.getItem('cabdin_riwayat_mutasi') || '[]');
+            let hasil = [];
+
+            // HANYA PROSES ASN YANG MASIH TERDAFTAR DI MASTER DATA PEGAWAI (Data_Pegawai)
+            dummyPegawai.forEach(peg => {
+                let pegNipClean = String(peg.nip || '').replace(/['\s]/g, '');
+                let sekolahSekarang = String(peg.sekolah || '').trim();
+
+                // Ambil riwayat mutasi dari memori lokal & deteksi otomatis dari Log_Harian jika berbeda sekolah
+                let riwayat = semuaMutasi
+                    .filter(m => String(m.nip).replace(/['\s]/g, '') === pegNipClean)
+                    .map(m => ({ ...m }));
+
+                let logsPegawai = dummyLogHarian.filter(l => String(l.nip || '').replace(/['\s]/g, '') === pegNipClean);
+                let logSekolahLama = logsPegawai.find(l => l.sekolah && l.sekolah !== '-' && l.sekolah.trim().toUpperCase() !== sekolahSekarang.toUpperCase());
+
+                if (logSekolahLama && !riwayat.some(r => r.sekolahLama.toUpperCase() === logSekolahLama.sekolah.trim().toUpperCase())) {
+                    let logsBaru = logsPegawai.filter(l => (l.sekolah || '').trim().toUpperCase() === sekolahSekarang.toUpperCase());
+                    let tglEfektif;
+                    if (logsBaru.length > 0) {
+                        logsBaru.sort((a, b) => new Date(a.yyyy, a.mm - 1, a.dd) - new Date(b.yyyy, b.mm - 1, b.dd));
+                        tglEfektif = new Date(logsBaru[0].yyyy, logsBaru[0].mm - 1, logsBaru[0].dd);
+                    } else {
+                        let logsLama = logsPegawai.filter(l => (l.sekolah || '').trim().toUpperCase() === logSekolahLama.sekolah.trim().toUpperCase());
+                        logsLama.sort((a, b) => new Date(b.yyyy, b.mm - 1, b.dd) - new Date(a.yyyy, a.mm - 1, a.dd));
+                        tglEfektif = new Date(logsLama[0].yyyy, logsLama[0].mm - 1, logsLama[0].dd + 1);
+                    }
+                    riwayat.push({
+                        nip: pegNipClean,
+                        sekolahLama: logSekolahLama.sekolah.trim(),
+                        sekolahBaru: sekolahSekarang,
+                        tglMutasi: `${tglEfektif.getFullYear()}-${String(tglEfektif.getMonth() + 1).padStart(2, '0')}-${String(tglEfektif.getDate()).padStart(2, '0')}`
+                    });
+                }
+
+                riwayat.sort((a, b) => new Date(a.tglMutasi) - new Date(b.tglMutasi));
+
+                // Susun rentang penempatan sekolah ASN berdasarkan tanggal mutasi
+                let segmen = [];
+                if (riwayat.length === 0) {
+                    segmen.push({ sekolah: sekolahSekarang, start: null, end: null });
+                } else {
+                    let tgl0 = new Date(riwayat[0].tglMutasi + 'T00:00:00');
+                    let sebelum0 = new Date(tgl0); sebelum0.setDate(sebelum0.getDate() - 1);
+                    segmen.push({ sekolah: riwayat[0].sekolahLama, start: null, end: sebelum0 });
+
+                    riwayat.forEach((r, idx) => {
+                        let tglStart = new Date(r.tglMutasi + 'T00:00:00');
+                        let tglEnd = null;
+                        if (idx + 1 < riwayat.length) {
+                            tglEnd = new Date(riwayat[idx + 1].tglMutasi + 'T00:00:00');
+                            tglEnd.setDate(tglEnd.getDate() - 1);
+                        }
+                        segmen.push({ sekolah: r.sekolahBaru, start: tglStart, end: tglEnd });
+                    });
+                }
+
+                if (isHarian) {
+                    let targetDay = parseInt(filterTglVal);
+                    let targetDate = new Date(filterThnVal, filterBlnVal - 1, targetDay);
+                    let segAktif = segmen.find(s => (!s.start || targetDate >= s.start) && (!s.end || targetDate <= s.end));
+                    if (!segAktif) return;
+
+                    let logMatch = logsPegawai.find(l => {
+                        let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
+                        return parseInt(l.dd) === targetDay && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
+                    });
+
+                    let hadirVal = logMatch ? (parseInt(logMatch.hadir) || 0) : 0;
+                    let izVal = logMatch ? (parseInt(logMatch.izin) || 0) : 0;
+                    let ctVal = logMatch ? (parseInt(logMatch.cuti) || 0) : 0;
+                    let skVal = logMatch ? (parseInt(logMatch.sakit) || 0) : 0;
+                    let dlVal = logMatch ? (parseInt(logMatch.dinasLuar) || 0) : 0;
+                    let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes(segAktif.sekolah.toUpperCase()));
+
+                    hasil.push({
+                        nama: peg.nama, nip: peg.nip, sekolah: segAktif.sekolah,
+                        sekolahId: matchSekolah ? matchSekolah.id : "ALL",
+                        hariKerja: 1, hadir: hadirVal,
+                        terlambatMin: logMatch ? (parseInt(logMatch.terlambatMin) || 0) : 0,
+                        cepatPulangMin: logMatch ? (parseInt(logMatch.cepatPulangMin) || 0) : 0,
+                        izin: izVal, cuti: ctVal, sakit: skVal, dinasLuar: dlVal,
+                        tanpaKet: (hadirVal + izVal + ctVal + skVal + dlVal === 0) ? 1 : 0
+                    });
+                } else {
+                    let periodStart = new Date(filterThnVal, filterBlnVal - 1, 1);
+                    let periodEnd = new Date(filterThnVal, filterBlnVal - 1, maxDay);
+
+                    segmen.forEach(s => {
+                        let effStart = (s.start && s.start > periodStart) ? s.start : periodStart;
+                        let effEnd = (s.end && s.end < periodEnd) ? s.end : periodEnd;
+                        if (effStart > effEnd) return;
+
+                        let startD = effStart.getDate();
+                        let endD = effEnd.getDate();
+                        let hkSeg = hitungHariKerjaRentang(filterThnVal, filterBlnVal, startD, endD);
+
+                        let logsSeg = logsPegawai.filter(l => {
+                            let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
+                            let dLog = parseInt(l.dd);
+                            return parseInt(l.mm) === filterBlnVal && lYear === filterThnVal && dLog >= startD && dLog <= endD;
+                        });
+
+                        let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
+                        logsSeg.forEach(log => {
+                            totHadir += (parseInt(log.hadir) || 0);
+                            totTelat += (parseInt(log.terlambatMin) || 0);
+                            totCepat += (parseInt(log.cepatPulangMin) || 0);
+                            totIz += (parseInt(log.izin) || 0);
+                            totCt += (parseInt(log.cuti) || 0);
+                            totSk += (parseInt(log.sakit) || 0);
+                            totDl += (parseInt(log.dinasLuar) || 0);
+                        });
+
+                        let tk = hkSeg - (totHadir + totIz + totCt + totSk + totDl);
+                        let matchSekolah = dummySekolah.find(sk => sk.nama.toUpperCase().includes(s.sekolah.toUpperCase()));
+
+                        hasil.push({
+                            nama: peg.nama, nip: peg.nip, sekolah: s.sekolah,
+                            sekolahId: matchSekolah ? matchSekolah.id : "ALL",
+                            hariKerja: hkSeg, hadir: totHadir, terlambatMin: totTelat, cepatPulangMin: totCepat,
+                            izin: totIz, cuti: totCt, sakit: totSk, dinasLuar: totDl,
+                            tanpaKet: tk < 0 ? 0 : tk
+                        });
+                    });
+                }
+            });
+
+            return hasil;
+        }
+
         function terapkanFilterAbsen() {
             sinkronkanMasterKeAbsensi();
 
@@ -1781,81 +1949,8 @@ function periksaBackupOtomatis() {
             let isBulanBerjalan = (filterBlnVal === (now.getMonth() + 1) && filterThnVal === now.getFullYear());
             let limitHari = isBulanBerjalan ? now.getDate() : null;
 
-            // Hari kerja otomatis dibatasi hingga tanggal hari ini jika bulan berjalan
             let hkOtomatis = isHarian ? 1 : hitungHariKerjaBulanIni(filterThnVal, filterBlnVal, limitHari);
-            let dataTampil = [];
-
-            if (isHarian) {
-                let targetDay = parseInt(filterTglVal);
-                dataTampil = dummyPegawai.map(peg => {
-                    let pegNipClean = String(peg.nip || '').replace(/['\s]/g, '');
-                    let logMatch = dummyLogHarian.find(l => {
-                        let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
-                        let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
-                        return logNipClean === pegNipClean && parseInt(l.dd) === targetDay && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
-                    });
-
-                    let hadirVal = logMatch ? (logMatch.hadir || 0) : 0;
-                    let izVal = logMatch ? (logMatch.izin || 0) : 0;
-                    let ctVal = logMatch ? (logMatch.cuti || 0) : 0;
-                    let skVal = logMatch ? (logMatch.sakit || 0) : 0;
-                    let dlVal = logMatch ? (logMatch.dinasLuar || 0) : 0;
-                    let totalKet = hadirVal + izVal + ctVal + skVal + dlVal;
-                    let alpaVal = (totalKet === 0) ? 1 : 0;
-
-                    let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
-
-                    return {
-                        nama: peg.nama,
-                        nip: peg.nip,
-                        sekolah: peg.sekolah,
-                        sekolahId: matchSekolah ? matchSekolah.id : "ALL",
-                        hariKerja: 1,
-                        hadir: hadirVal,
-                        terlambatMin: logMatch ? (logMatch.terlambatMin || 0) : 0,
-                        cepatPulangMin: logMatch ? (logMatch.cepatPulangMin || 0) : 0,
-                        izin: izVal,
-                        cuti: ctVal,
-                        sakit: skVal,
-                        dinasLuar: dlVal,
-                        tanpaKet: alpaVal
-                    };
-                });
-            } else {
-                dummyAbsensi.forEach(p => {
-                    let pNipClean = String(p.nip || '').replace(/['\s]/g, '');
-                    let logsBulanIni = dummyLogHarian.filter(l => {
-                        let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
-                        let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
-                        return logNipClean === pNipClean && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
-                    });
-
-                    let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
-                    logsBulanIni.forEach(log => {
-                        totHadir += (parseInt(log.hadir) || 0);
-                        totTelat += (parseInt(log.terlambatMin) || 0);
-                        totCepat += (parseInt(log.cepatPulangMin) || 0);
-                        totIz += (parseInt(log.izin) || 0);
-                        totCt += (parseInt(log.cuti) || 0);
-                        totSk += (parseInt(log.sakit) || 0);
-                        totDl += (parseInt(log.dinasLuar) || 0);
-                    });
-
-                    p.hadir = totHadir;
-                    p.terlambatMin = totTelat;
-                    p.cepatPulangMin = totCepat;
-                    p.izin = totIz;
-                    p.cuti = totCt;
-                    p.sakit = totSk;
-                    p.dinasLuar = totDl;
-                    p.hariKerja = hkOtomatis;
-            
-                    let totalTercatat = totHadir + totIz + totCt + totSk + totDl; 
-                    p.tanpaKet = hkOtomatis - totalTercatat;
-                    if (p.tanpaKet < 0) p.tanpaKet = 0;
-                });
-                dataTampil = dummyAbsensi;
-            }
+            let dataTampil = ambilDataRekapTerfilter(filterTglVal, filterBlnVal, filterThnVal);
 
             if (filterSekolahVal !== "ALL") {
                 let sekolahObj = dummySekolah.find(s => String(s.id) === String(filterSekolahVal));
@@ -1880,7 +1975,7 @@ function periksaBackupOtomatis() {
                     <td class="p-3 font-semibold text-slate-800">${a.nama}</td>
                     <td class="p-3 text-slate-500 font-mono text-xs">${a.nip}</td>
                     <td class="p-3 text-slate-600">${nmSekolah}</td>
-                    <td class="p-3 text-center font-bold text-indigo-600 bg-indigo-50/50">${a.hariKerja || hkOtomatis} Hari</td>
+                    <td class="p-3 text-center font-bold text-indigo-600 bg-indigo-50/50">${a.hariKerja ?? hkOtomatis} Hari</td>
                     <td class="p-3 text-center font-bold text-blue-600">${a.hadir || 0}</td>
                     <td class="p-3 text-center font-bold text-orange-600">${a.terlambatMin || 0} Mnt</td>
                     <td class="p-3 text-center font-bold text-yellow-600">${a.cepatPulangMin || 0} Mnt</td>
@@ -3232,62 +3327,7 @@ function downloadExcelAbsenInternal(sekolahFilter = "ALL") {
     let isBulanBerjalan = (filterBlnVal === (now.getMonth() + 1) && filterThnVal === now.getFullYear());
     let limitHari = isBulanBerjalan ? now.getDate() : null;
 
-    let hkOtomatis = isHarian ? 1 : hitungHariKerjaBulanIni(filterThnVal, filterBlnVal, limitHari);
-    let dataTampil = [];
-
-    if (isHarian) {
-        let targetDay = parseInt(filterTglVal);
-        dataTampil = dummyPegawai.map(peg => {
-            let pegNipClean = String(peg.nip || '').replace(/['\s]/g, '');
-            let logMatch = dummyLogHarian.find(l => {
-                let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
-                let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
-                return logNipClean === pegNipClean && parseInt(l.dd) === targetDay && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
-            });
-
-            let hadirVal = logMatch ? (parseInt(logMatch.hadir) || 0) : 0;
-            let izVal = logMatch ? (parseInt(logMatch.izin) || 0) : 0;
-            let ctVal = logMatch ? (parseInt(logMatch.cuti) || 0) : 0;
-            let skVal = logMatch ? (parseInt(logMatch.sakit) || 0) : 0;
-            let dlVal = logMatch ? (parseInt(logMatch.dinasLuar) || 0) : 0;
-            let totalKet = hadirVal + izVal + ctVal + skVal + dlVal;
-            let matchSekolah = dummySekolah.find(s => s.nama.toUpperCase().includes((peg.sekolah || '').toUpperCase()));
-
-            return {
-                nama: peg.nama, nip: peg.nip, sekolah: peg.sekolah || '-',
-                sekolahId: matchSekolah ? matchSekolah.id : "ALL",
-                hariKerja: 1, hadir: hadirVal, terlambatMin: logMatch ? (parseInt(logMatch.terlambatMin) || 0) : 0, 
-                cepatPulangMin: logMatch ? (parseInt(logMatch.cepatPulangMin) || 0) : 0,
-                izin: izVal, cuti: ctVal, sakit: skVal, dinasLuar: dlVal,
-                tanpaKet: (totalKet === 0) ? 1 : 0
-            };
-        });
-    } else {
-        dummyAbsensi.forEach(p => {
-            let pNipClean = String(p.nip || '').replace(/['\s]/g, '');
-            let logsBulanIni = dummyLogHarian.filter(l => {
-                let logNipClean = String(l.nip || '').replace(/['\s]/g, '');
-                let lYear = (parseInt(l.yyyy) < 100 ? parseInt(l.yyyy) + 2000 : parseInt(l.yyyy));
-                return logNipClean === pNipClean && parseInt(l.mm) === filterBlnVal && lYear === filterThnVal;
-            });
-
-            let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
-            logsBulanIni.forEach(log => {
-                totHadir += (parseInt(log.hadir) || 0);
-                totTelat += (parseInt(log.terlambatMin) || 0);
-                totCepat += (parseInt(log.cepatPulangMin) || 0);
-                totIz += (parseInt(log.izin) || 0);
-                totCt += (parseInt(log.cuti) || 0);
-                totSk += (parseInt(log.sakit) || 0);
-                totDl += (parseInt(log.dinasLuar) || 0);
-            });
-            
-            p.hadir = totHadir; p.terlambatMin = totTelat; p.cepatPulangMin = totCepat;
-            p.izin = totIz; p.cuti = totCt; p.sakit = totSk; p.dinasLuar = totDl; p.hariKerja = hkOtomatis;
-            let tk = hkOtomatis - (totHadir + totIz + totCt + totSk + totDl); p.tanpaKet = tk < 0 ? 0 : tk;
-        });
-        dataTampil = [...dummyAbsensi];
-    }
+    let dataTampil = ambilDataRekapTerfilter(filterTglVal, filterBlnVal, filterThnVal);
 
     if (sekolahFilter !== "ALL") {
         let sekolahObj = dummySekolah.find(s => String(s.id) === String(sekolahFilter));
