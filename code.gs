@@ -31,6 +31,9 @@ function ambilSemuaDataFromSheet() {
       }
     }
 
+    // Sinkronkan Rekap_Absen dari Log_Harian terlebih dahulu agar selalu akurat
+    sinkronkanLogHarianKeRekapAbsen();
+
     let sheetRekap = ss.getSheetByName('Rekap_Absen') || ss.getSheetByName('Rekap Absensi');
     let dataAbsensi = [];
     if (sheetRekap) {
@@ -374,6 +377,96 @@ function simpanLogHarianKeSheet(listLog) {
     sheet.getRange(1, 1, rows.length, 13).setValues(rows);
     return "OK";
   } catch(e) { return "Error: " + e.message; }
+}
+
+function sinkronkanLogHarianKeRekapAbsen(targetBulan, targetTahun) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return null;
+
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheetPegawai = ss.getSheetByName('Data_Pegawai') || ss.getSheetByName('Data Pegawai');
+    const sheetLog = ss.getSheetByName('Log_Harian');
+    let sheetRekap = ss.getSheetByName('Rekap_Absen') || ss.getSheetByName('Rekap Absensi');
+    if (!sheetRekap) sheetRekap = ss.insertSheet('Rekap_Absen');
+    if (!sheetPegawai || !sheetLog) return null;
+
+    const now = new Date();
+    const bulan = targetBulan || (now.getMonth() + 1);
+    const tahun = targetTahun || now.getFullYear();
+    const rawLog = sheetLog.getDataRange().getValues();
+    if (rawLog.length <= 1) return null;
+
+    const logMap = {};
+    let adaLogBulanIni = false;
+
+    for (let i = 1; i < rawLog.length; i++) {
+      const row = rawLog[i];
+      const nip = String(row[0] || '').replace(/['\s]/g, '').trim();
+      if (!nip) continue;
+      let yr = parseInt(row[3]) || 0;
+      if (yr > 0 && yr < 100) yr += 2000;
+      const mm = parseInt(row[4]) || 0;
+
+      if (yr === tahun && mm === bulan) {
+        adaLogBulanIni = true;
+        if (!logMap[nip]) logMap[nip] = { hadir: 0, terlambat: 0, cepatPulang: 0, izin: 0, cuti: 0, sakit: 0, dinasLuar: 0 };
+        logMap[nip].hadir += (parseInt(row[6]) || 0);
+        logMap[nip].terlambat += (parseInt(row[7]) || 0);
+        logMap[nip].cepatPulang += (parseInt(row[8]) || 0);
+        logMap[nip].izin += (parseInt(row[9]) || 0);
+        logMap[nip].cuti += (parseInt(row[10]) || 0);
+        logMap[nip].sakit += (parseInt(row[11]) || 0);
+        logMap[nip].dinasLuar += (parseInt(row[12]) || 0);
+      }
+    }
+    if (!adaLogBulanIni) return null;
+
+    const liburList = getLiburOtomatisDariGoogle(tahun);
+    const isBulanBerjalan = (bulan === (now.getMonth() + 1) && tahun === now.getFullYear());
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    const maxDay = isBulanBerjalan ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+
+    let hariKerja = 0;
+    for (let d = 1; d <= maxDay; d++) {
+      const dt = new Date(tahun, bulan - 1, d);
+      const dateStr = tahun + '-' + String(bulan).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      if (dt.getDay() !== 0 && dt.getDay() !== 6 && liburList.indexOf(dateStr) === -1) hariKerja++;
+    }
+
+    const rawPegawai = sheetPegawai.getDataRange().getValues();
+    const rowsRekap = [['NIP', 'Nama_Pegawai', 'Sekolah', 'Hari_Kerja', 'Hadir', 'Keterlambatan', 'Cepat_Pulang', 'Izin', 'Cuti', 'Sakit', 'Dinas_Luar', 'Tanpa_Ket']];
+
+    for (let i = 1; i < rawPegawai.length; i++) {
+      const pRow = rawPegawai[i];
+      const nip = String(pRow[0] || '').replace(/['\s]/g, '').trim();
+      const nama = String(pRow[1] || '').trim();
+      const sekolah = String(pRow[2] || '').trim();
+      if (!nip || !nama) continue;
+
+      const stat = logMap[nip] || { hadir: 0, terlambat: 0, cepatPulang: 0, izin: 0, cuti: 0, sakit: 0, dinasLuar: 0 };
+      const tanpaKet = Math.max(0, hariKerja - (stat.hadir + stat.izin + stat.cuti + stat.sakit + stat.dinasLuar));
+      rowsRekap.push(["'" + nip, nama, sekolah, hariKerja, stat.hadir, stat.terlambat, stat.cepatPulang, stat.izin, stat.cuti, stat.sakit, stat.dinasLuar, tanpaKet]);
+    }
+
+    sheetRekap.clearContents();
+    sheetRekap.getRange(1, 1, rowsRekap.length, 12).setValues(rowsRekap);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function autoSyncRekapAbsenTrigger(e) {
+  sinkronkanLogHarianKeRekapAbsen();
+}
+
+function pasangTriggerOtomatis() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'autoSyncRekapAbsenTrigger') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('autoSyncRekapAbsenTrigger').forSpreadsheet(ss).onChange().create();
 }
 
 function getLiburOtomatisDariGoogle(tahun) {
