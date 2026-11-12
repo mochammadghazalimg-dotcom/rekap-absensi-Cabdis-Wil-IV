@@ -2268,6 +2268,10 @@ function periksaBackupOtomatis() {
                 } else {
                     Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
                 }
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Gagal memproses file log absensi: ' + err.message, 'error');
+        }
     };
     reader.readAsArrayBuffer(file);
     event.target.value = '';
