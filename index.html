@@ -1931,6 +1931,7 @@ function periksaBackupOtomatis() {
             if (jsonData.length > 0) {
                 let riwayatHarian = {}; 
                 let asnTidakTerdaftar = [];
+                let asnDoubleStatus = [];
                 let today = new Date();
                 today.setHours(23, 59, 59, 999); // Batas akhir hari ini
 
@@ -2006,12 +2007,63 @@ function periksaBackupOtomatis() {
                     let skDB = logEksis ? (parseInt(logEksis.sakit || 0)) : 0;
                     let dlDB = logEksis ? (parseInt(logEksis.dinasLuar || 0)) : 0;
 
+                    // CEK DATABASE: Jika sudah ada Izin / Cuti / Sakit / Dinas Luar di tanggal yang sama, TOLAK!
+                    if (izDB > 0 || ctDB > 0 || skDB > 0 || dlDB > 0) {
+                        let statusDbArr = [];
+                        if (izDB > 0) statusDbArr.push('Izin');
+                        if (ctDB > 0) statusDbArr.push('Cuti');
+                        if (skDB > 0) statusDbArr.push('Sakit');
+                        if (dlDB > 0) statusDbArr.push('Dinas Luar');
+
+                        let tglRapi = `${String(tglCheck.dd).padStart(2, '0')}/${String(tglCheck.mm).padStart(2, '0')}/${tglCheck.yyyy}`;
+                        let dupKey = cleanNipCheck + "_" + tglRapi;
+
+                        if (!asnDoubleStatus.some(x => x.dupKey === dupKey)) {
+                            asnDoubleStatus.push({
+                                dupKey: dupKey,
+                                nama: pegEksis.nama || namaPegawai,
+                                nip: nipPegawai,
+                                sekolah: pegEksis.sekolah || namaSekolah,
+                                statusAda: statusDbArr.join(' / '),
+                                tanggal: tglRapi
+                            });
+                        }
+                        return; // Tolak baris ini agar tidak double terinput
+                    }
+
                     if (!riwayatHarian[key]) {
                         riwayatHarian[key] = {
                             nip: nipPegawai, nama: namaPegawai, sekolah: namaSekolah, tanggal: tanggal,
                             datang: null, pulang: null, 
-                            izin: izDB, cuti: ctDB, sakit: skDB, dinasLuar: dlDB
+                            izin: 0, cuti: 0, sakit: 0, dinasLuar: 0
                         };
+                    }
+
+                    // Cegah juga jika dalam 1 file CSV yang sama ada 2 status berbeda di tanggal yang sama
+                    let isStatusKetBaru = (status === 'IZIN' || status === 'CUTI' || status === 'SAKIT' || status === 'DINAS LUAR' || status === 'DL');
+                    let sudahAdaKetDiFile = (riwayatHarian[key].izin > 0 || riwayatHarian[key].cuti > 0 || riwayatHarian[key].sakit > 0 || riwayatHarian[key].dinasLuar > 0);
+
+                    if (isStatusKetBaru && sudahAdaKetDiFile) {
+                        let statusFileArr = [];
+                        if (riwayatHarian[key].izin > 0) statusFileArr.push('Izin');
+                        if (riwayatHarian[key].cuti > 0) statusFileArr.push('Cuti');
+                        if (riwayatHarian[key].sakit > 0) statusFileArr.push('Sakit');
+                        if (riwayatHarian[key].dinasLuar > 0) statusFileArr.push('Dinas Luar');
+
+                        let tglRapi = `${String(tglCheck.dd).padStart(2, '0')}/${String(tglCheck.mm).padStart(2, '0')}/${tglCheck.yyyy}`;
+                        let dupKey = cleanNipCheck + "_" + tglRapi;
+
+                        if (!asnDoubleStatus.some(x => x.dupKey === dupKey)) {
+                            asnDoubleStatus.push({
+                                dupKey: dupKey,
+                                nama: pegEksis.nama || namaPegawai,
+                                nip: nipPegawai,
+                                sekolah: pegEksis.sekolah || namaSekolah,
+                                statusAda: statusFileArr.join(' / '),
+                                tanggal: tglRapi
+                            });
+                        }
+                        return; // Tolak status ganda
                     }
 
                     if (status === 'IZIN') riwayatHarian[key].izin = 1;
@@ -2089,7 +2141,7 @@ function periksaBackupOtomatis() {
                         if (record.pulang !== null) {
                             let [jamP, mntP] = record.pulang.split(':').map(Number);
                             let totalPulangMnt = (jamP * 60) + mntP;
-                            let batasPulangMnt = (15 * 60);
+                            let batasPulangMnt = (15 * 60) + 30;
                             cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
                         } else { 
                             cptPulangBaru = countLupaPulang >= 5 ? 480 : 120; 
@@ -2166,36 +2218,56 @@ function periksaBackupOtomatis() {
 
                 renderRekapAbsen(document.getElementById('content-area'));
 
-                if (asnTidakTerdaftar.length > 0) {
-                    let listHtml = asnTidakTerdaftar.map(x => 
-                        `<div class="border-b border-slate-200 py-1.5 text-left text-xs">
-                            <p class="font-bold text-slate-800">${x.nama}</p>
-                            <p class="text-slate-500 font-mono">NIP: ${x.nip} | ${x.sekolah}</p>
-                        </div>`
-                    ).join('');
+                if (asnDoubleStatus.length > 0 || asnTidakTerdaftar.length > 0) {
+                    let htmlPeringatan = '';
+
+                    if (asnDoubleStatus.length > 0) {
+                        let listDoubleHtml = asnDoubleStatus.map(x => 
+                            `<div class="border-b border-red-200 py-2 text-left text-xs">
+                                <p class="text-slate-800 leading-relaxed">
+                                    ASN <b class="text-red-700">${x.nama}</b> (NIP: <b class="font-mono">${x.nip}</b>, <b>${x.sekolah}</b>) sudah ada <b class="text-red-700 uppercase">${x.statusAda}</b> di tanggal <b>${x.tanggal}</b>.
+                                </p>
+                            </div>`
+                        ).join('');
+
+                        htmlPeringatan += `
+                            <div class="text-xs text-slate-700 mb-2 text-left">
+                                <b class="text-red-600">PERINGATAN DOUBLE INPUT:</b> Data berikut <b>DITOLAK</b> karena sudah tersimpan di database pada tanggal yang sama:
+                            </div>
+                            <div class="bg-red-50 border border-red-200 rounded p-2.5 max-h-48 overflow-y-auto mb-3">
+                                ${listDoubleHtml}
+                            </div>
+                        `;
+                    }
+
+                    if (asnTidakTerdaftar.length > 0) {
+                        let listHtml = asnTidakTerdaftar.map(x => 
+                            `<div class="border-b border-slate-200 py-1.5 text-left text-xs">
+                                <p class="font-bold text-slate-800">${x.nama}</p>
+                                <p class="text-slate-500 font-mono">NIP: ${x.nip} | ${x.sekolah}</p>
+                            </div>`
+                        ).join('');
+
+                        htmlPeringatan += `
+                            <div class="text-xs text-slate-700 mb-2 text-left">
+                                <b>PERINGATAN NIP TIDAK TERDAFTAR:</b> Terdapat <b>${asnTidakTerdaftar.length} ASN</b> yang tidak dibaca karena belum ada di Master Pegawai:
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 rounded p-2 max-h-40 overflow-y-auto">
+                                ${listHtml}
+                            </div>
+                        `;
+                    }
 
                     Swal.fire({
                         icon: 'warning',
-                        title: 'Sebagian Data Dibatalkan',
-                        html: `
-                            <div class="text-xs text-slate-700 mb-2 text-left">
-                                <b>PERINGATAN:</b> Terdapat <b>${asnTidakTerdaftar.length} ASN</b> pada file yang <b>TIDAK DIBACA</b> karena NIP tidak terdaftar di Master Data Pegawai:
-                            </div>
-                            <div class="bg-slate-50 border border-slate-200 rounded p-2 max-h-48 overflow-y-auto">
-                                ${listHtml}
-                            </div>
-                            <p class="text-[11px] text-red-600 mt-2 text-left">* Silakan tambahkan ASN tersebut ke Master Data Pegawai terlebih dahulu.</p>
-                        `,
-                        confirmButtonText: 'Saya Mengerti',
-                        confirmButtonColor: '#f59e0b'
+                        title: 'Peringatan Unggah Data',
+                        html: htmlPeringatan,
+                        confirmButtonText: 'Mengerti',
+                        confirmButtonColor: '#ef4444'
                     });
                 } else {
                     Swal.fire('Berhasil!', 'Log absensi berhasil diunggah & direkap otomatis.', 'success');
                 }
-            }
-        } catch(err) {
-            Swal.fire('Error', 'Gagal memproses file log CSV.', 'error');
-        }
     };
     reader.readAsArrayBuffer(file);
     event.target.value = '';
