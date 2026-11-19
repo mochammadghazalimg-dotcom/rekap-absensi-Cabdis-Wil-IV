@@ -1267,12 +1267,12 @@ function periksaBackupOtomatis() {
                             <select id="filterSekolahPegawai" onchange="renderTabelPegawai()" class="p-2 border border-slate-300 rounded text-sm min-w-[200px]">
                                 ${sekolahOptions}
                             </select>
-                            <input type="file" id="uploadCSVPegawai" accept=".csv" class="hidden" onchange="prosesUploadPegawaiCSV(event)" />
+                            <input type="file" id="uploadCSVPegawai" accept=".xlsx, .xls, .csv" class="hidden" onchange="prosesUploadPegawaiCSV(event)" />
                             <button onclick="downloadTemplatePegawai()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
                                 <i class="fa-solid fa-download"></i> Template
                             </button>
                             <button onclick="document.getElementById('uploadCSVPegawai').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
-                                <i class="fa-solid fa-file-csv"></i> Unggah CSV Pegawai
+                                <i class="fa-solid fa-file-excel"></i> Unggah Excel/CSV Pegawai
                             </button>
                         </div>
                     </div>
