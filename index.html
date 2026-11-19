@@ -2518,14 +2518,8 @@ function periksaBackupOtomatis() {
             }
 
             // Saring ASN dari sheet Rekap_Absen yang memiliki Tanpa Keterangan >= 1 (0 tidak tampil)
-            // Pada renderTabelIndisiplinerDariRekap:
             let dataBulanIni = ambilDataRekapTerfilter("ALL", selectedMonth, selectedYear);
             let filtered = dataBulanIni.filter(a => (parseInt(a.tanpaKet) || 0) >= 1);
-
-            // Pada downloadExcelIndisipliner:
-            let dataBulanIni = ambilDataRekapTerfilter("ALL", filterBlnVal, filterThnVal);
-            let dataIndisipliner = dataBulanIni
-                .filter(p => (parseInt(p.tanpaKet) || 0) >= 1)
 
             filtered.sort((a, b) => {
                 let tkA = parseInt(a.tanpaKet) || 0;
