@@ -1190,6 +1190,7 @@ function periksaBackupOtomatis() {
                     
                     if (jsonData.length > 0) {
                         let count = 0;
+                        let ditolakSekolah = [];
                         jsonData.forEach(row => {
                             let keys = Object.keys(row);
                             
@@ -1206,18 +1207,33 @@ function periksaBackupOtomatis() {
                             let keyNIP = keys.find(k => k.trim().toLowerCase().includes('nip'));
                             let nip = keyNIP ? String(row[keyNIP]).trim() : '-';
 
-                            let exist = dummySekolah.find(s => s.nama.toUpperCase() === nama.toUpperCase());
-                            if(!exist) {
-                                dummySekolah.push({ id: Date.now() + Math.random(), nama: nama, npsn: npsn, kepsek: kepsek, nip: nip });
+                            let nipClean = nip === '-' ? '-' : (nip.replace(/^'+/, '').replace(/['\s]/g, '').trim() || '-');
+                            let exist = dummySekolah.find(s => String(s.nama || '').trim().toUpperCase() === nama.toUpperCase());
+                            if (exist) {
+                                ditolakSekolah.push(nama);
+                            } else {
+                                dummySekolah.push({ id: Date.now() + Math.random(), nama: nama, npsn: npsn, kepsek: kepsek, nip: nipClean });
                                 count++;
                             }
                         });
 
-                        if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        if (count > 0 && typeof google !== 'undefined' && google.script && google.script.run) {
                             google.script.run.simpanDataSekolahKeSheet(dummySekolah);
                         }
                         renderDataSekolah(document.getElementById('content-area'));
-                        Swal.fire('Berhasil!', `${count} sekolah baru berhasil diunggah.`, 'success');
+
+                        if (ditolakSekolah.length > 0) {
+                            let pesanList = ditolakSekolah.map(nm => `data SEKOLAH (${nm}) sudah ada di data base silahkan dicek manual terlebih dahulu`);
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Data Sekolah Ditolak!',
+                                html: `<div class="text-left text-xs text-slate-700 max-h-48 overflow-y-auto space-y-1.5">${pesanList.map(m => `<p>• ${m}</p>`).join('')}</div>`,
+                                confirmButtonText: 'OKE',
+                                confirmButtonColor: '#ef4444'
+                            });
+                        } else {
+                            Swal.fire({ icon: 'success', title: 'Berhasil!', text: `${count} sekolah baru berhasil diunggah.`, confirmButtonText: 'OKE' });
+                        }
                     }
                 } catch(err) {
                     Swal.fire('Error', 'Gagal memproses file sekolah.', 'error');
@@ -1572,21 +1588,27 @@ function periksaBackupOtomatis() {
                     let diterimaCount = 0;
 
                     results.data.forEach(row => {
-                        let nip = String(row['nip'] || row['NIP'] || '').trim();
+                        let nipRaw = String(row['nip'] || row['NIP'] || '').trim();
+                        let nipClean = nipRaw.replace(/^'+/, '').replace(/['\s]/g, '').trim();
                         let nama = String(row['name'] || row['nama'] || row['Nama'] || row['Nama Pegawai'] || '').trim();
                         let sekolah = String(row['school_name'] || row['sekolah'] || row['Sekolah'] || '').trim();
                         let photoUploaded = row['photo_uploaded'] || 'False';
 
-                        if (!nip || nip === '-' || !nama) return;
+                        if (!nipClean || nipClean === '-' || !nama) return;
 
-                        let exists = dummyPegawai.some(p => String(p.nip).trim() === nip);
+                        let exists = dummyPegawai.some(p => {
+                            let dbNip = String(p.nip || '').replace(/^'+/, '').replace(/['\s]/g, '').trim();
+                            return dbNip === nipClean &&
+                                   String(p.nama || '').trim().toUpperCase() === nama.toUpperCase() &&
+                                   String(p.sekolah || '').trim().toUpperCase() === sekolah.toUpperCase();
+                        });
 
                         if (exists) {
-                            ditolakNIP.push({ nip: nip, nama: nama });
+                            ditolakNIP.push({ nip: nipClean, nama: nama, sekolah: sekolah });
                         } else {
                             dummyPegawai.push({
                                 id: Date.now() + Math.random(),
-                                nip: nip,
+                                nip: nipClean,
                                 nama: nama,
                                 sekolah: sekolah,
                                 photo_uploaded: photoUploaded
@@ -1596,21 +1618,29 @@ function periksaBackupOtomatis() {
                     });
 
                     if (ditolakNIP.length > 0) {
-                        let contohNip = ditolakNIP.slice(0, 5).map(x => `${x.nip} (${x.nama})`).join('<br>');
-                        let sisaDitolak = ditolakNIP.length > 5 ? `<br><i>...dan ${ditolakNIP.length - 5} data lainnya.</i>` : '';
+                        let daftarDitolak = ditolakNIP
+                            .map(x => `• data ASN (${x.nama}, ${x.nip}, ${x.sekolah}) sudah ada di data base silahkan dicek manual terlebih dahulu`)
+                            .join('<br>');
 
                         Swal.fire({
                             icon: 'warning',
-                            title: 'Peringatan NIP Ganda!',
+                            title: 'Data ASN Ditolak!',
                             html: `<div class="text-left text-xs text-slate-700">
                                 <p class="font-bold text-emerald-600 mb-1">✔ ${diterimaCount} Pegawai baru berhasil ditambahkan.</p>
-                                <p class="font-bold text-red-600 mb-2">✖ ${ditolakNIP.length} Pegawai tertolak karena NIP sudah terdaftar:</p>
-                                <div class="bg-slate-100 p-2 rounded border border-slate-300 font-mono text-[11px] max-h-36 overflow-y-auto">${contohNip}${sisaDitolak}</div>
+                                <p class="font-bold text-red-600 mb-2">✖ ${ditolakNIP.length} Data ASN tertolak:</p>
+                                <div class="bg-red-50 p-2.5 rounded border border-red-200 text-[11px] max-h-40 overflow-y-auto leading-relaxed">${daftarDitolak}</div>
                             </div>`,
-                            confirmButtonColor: '#3b82f6'
+                            confirmButtonText: 'OKESIII',
+                            confirmButtonColor: '#ef4444'
                         });
                     } else {
-                        Swal.fire('Berhasil!', `${diterimaCount} Data Pegawai ASN berhasil diimpor.`, 'success');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil!',
+                            text: `${diterimaCount} Data Pegawai ASN berhasil diimpor.`,
+                            confirmButtonText: 'OKE',
+                            confirmButtonColor: '#10b981'
+                        });
                     }
 
                     if (typeof google !== 'undefined' && google.script && google.script.run) {
