@@ -2201,22 +2201,6 @@ function periksaBackupOtomatis() {
                     }
                 });
 
-                // Hitung frekuensi lupa absen dalam sebulan per NIP
-                let hitungLupaAbsen = {};
-                Object.values(riwayatHarian).forEach(rec => {
-                    if (rec.izinSakit === 0) {
-                        if (!hitungLupaAbsen[rec.nip]) {
-                            hitungLupaAbsen[rec.nip] = { lupaDatang: 0, lupaPulang: 0 };
-                        }
-                        if (rec.datang === null && rec.pulang !== null) {
-                            hitungLupaAbsen[rec.nip].lupaDatang++;
-                        }
-                        if (rec.datang !== null && rec.pulang === null) {
-                            hitungLupaAbsen[rec.nip].lupaPulang++;
-                        }
-                    }
-                });
-
                 // Reset hitungan dummyAbsensi sebelum rekap ulang
                 dummyAbsensi.forEach(a => {
                     a.hadir = 0;
@@ -2228,7 +2212,7 @@ function periksaBackupOtomatis() {
                     a.dinasLuar = 0;
                 });
 
-                // Hitung keterlambatan & cepat pulang
+                // Hitung keterlambatan & cepat pulang (Aturan Pergub Sulsel 2026: Lupa masuk/pulang = 225 menit)
                 Object.values(riwayatHarian).forEach(record => {
                     let hadirBaru = 0, terlambatBaru = 0, cptPulangBaru = 0;
                     let isAdaKet = (record.izin > 0 || record.cuti > 0 || record.sakit > 0 || record.dinasLuar > 0);
@@ -2237,9 +2221,6 @@ function periksaBackupOtomatis() {
                         hadirBaru = 0; terlambatBaru = 0; cptPulangBaru = 0;
                     } else if (record.datang !== null || record.pulang !== null) {
                         hadirBaru = 1;
-
-                        let countLupaDatang = hitungLupaAbsen[record.nip] ? hitungLupaAbsen[record.nip].lupaDatang : 0;
-                        let countLupaPulang = hitungLupaAbsen[record.nip] ? hitungLupaAbsen[record.nip].lupaPulang : 0;
                         
                         if (record.datang !== null) {
                             let [jamD, mntD] = record.datang.split(':').map(Number);
@@ -2247,7 +2228,8 @@ function periksaBackupOtomatis() {
                             let batasMasukMnt = (8 * 60);
                             terlambatBaru = totalDatangMnt > batasMasukMnt ? totalDatangMnt - batasMasukMnt : 0;
                         } else { 
-                            terlambatBaru = countLupaDatang >= 5 ? 480 : 240; 
+                            // Lupa absen masuk (hanya ada absen pulang) -> potongan 225 menit
+                            terlambatBaru = 225; 
                         }
                         
                         if (record.pulang !== null) {
@@ -2256,7 +2238,8 @@ function periksaBackupOtomatis() {
                             let batasPulangMnt = (15 * 60) + 30;
                             cptPulangBaru = totalPulangMnt < batasPulangMnt ? batasPulangMnt - totalPulangMnt : 0;
                         } else { 
-                            cptPulangBaru = countLupaPulang >= 5 ? 480 : 120; 
+                            // Lupa absen pulang (hanya ada absen masuk) -> potongan 225 menit
+                            cptPulangBaru = 225; 
                         }
                     }
 
