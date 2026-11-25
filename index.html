@@ -501,13 +501,12 @@ function periksaBackupOtomatis() {
                 if (arsipMatch && arsipMatch.snapshot) {
                     try {
                         let parsed = JSON.parse(arsipMatch.snapshot);
-                        if (parsed && parsed.totalPegawai > 0 && parsed.totalSekolah >= (dummySekolah.length || 1)) {
+                        if (parsed && parsed.totalPegawai > 0 && parsed.totalSekolah > 0) {
                             return parsed;
                         }
                     } catch(e) {}
                 }
             }
-
             let maxDayLimit = isCurrentMonth ? todayDate : null;
             let hkOtomatis = hitungHariKerjaBulanIni(tahun, bulan, maxDayLimit);
 
@@ -2023,11 +2022,17 @@ function periksaBackupOtomatis() {
                 if (parts[0].length === 4) {
                     yyyy = p1; mm = p2; dd = p3;
                 } else {
-                    mm = p1; dd = p2; yyyy = p3 < 100 ? p3 + 2000 : p3;
+                    // Format Indonesia DD/MM/YYYY (seperti 20/11/2026)
+                    if (p1 > 12) {
+                        dd = p1; mm = p2;
+                    } else if (p2 > 12) {
+                        mm = p1; dd = p2;
+                    } else {
+                        dd = p1; mm = p2;
+                    }
+                    yyyy = p3 < 100 ? p3 + 2000 : p3;
                 }
             }
-            return { yyyy, mm, dd };
-        }
 
         function prosesUploadLogMingguan(event) {
     const file = event.target.files[0];
@@ -2044,8 +2049,11 @@ function periksaBackupOtomatis() {
                 let riwayatHarian = {}; 
                 let asnTidakTerdaftar = [];
                 let asnDoubleStatus = [];
+                let jumlahDiabaikanLuarBulan = 0;
                 let today = new Date();
                 today.setHours(23, 59, 59, 999); // Batas akhir hari ini
+                let currentMonth = today.getMonth() + 1;
+                let currentYear = today.getFullYear();
 
                 jsonData.forEach(row => {
                     let nipPegawai, namaPegawai, namaSekolah, tanggal, jam, status;
@@ -2090,10 +2098,14 @@ function periksaBackupOtomatis() {
                         return; // Abaikan data absensi ini
                     }
 
-                    // FILTER KEAMANAN TANGGAL
+                    // FILTER KEAMANAN TANGGAL: HANYA TERIMA BULAN & TAHUN BERJALAN (S/D HARI INI)
                     let tglCheck = parseTanggalLog(tanggal);
+                    if (tglCheck.mm !== currentMonth || tglCheck.yyyy !== currentYear) {
+                        jumlahDiabaikanLuarBulan++;
+                        return; // Abaikan data bulan lalu (mis. Oktober) atau bulan depan (mis. Desember)
+                    }
+
                     let logDateObj = new Date(tglCheck.yyyy, tglCheck.mm - 1, tglCheck.dd);
-                    
                     if (logDateObj > today) {
                         return; 
                     }
