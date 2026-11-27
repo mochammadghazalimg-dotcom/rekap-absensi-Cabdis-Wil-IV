@@ -526,7 +526,11 @@ function periksaBackupOtomatis() {
                 let totIzin = 0, totCuti = 0, totSakit = 0, totDL = 0;
 
                 if (logsBulanIni.length > 0) {
+                    let logUnikDash = {};
                     logsBulanIni.forEach(log => {
+                        logUnikDash[parseInt(log.dd)] = log;
+                    });
+                    Object.values(logUnikDash).forEach(log => {
                         totHadir += (parseInt(log.hadir) || 0);
                         totTelat += (parseInt(log.terlambatMin) || 0);
                         totCepat += (parseInt(log.cepatPulangMin) || 0);
@@ -535,6 +539,7 @@ function periksaBackupOtomatis() {
                         totSakit += (parseInt(log.sakit) || 0);
                         totDL += (parseInt(log.dinasLuar) || 0);
                     });
+                }
                 } else {
                     let matchAbsen = dummyAbsensi.find(a => String(a.nip || '').replace(/['\s]/g, '') === pNipClean);
                     if (matchAbsen) {
@@ -1906,8 +1911,13 @@ function periksaBackupOtomatis() {
                             return parseInt(l.mm) === filterBlnVal && lYear === filterThnVal && dLog >= startD && dLog <= endD;
                         });
 
-                        let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
+                        let logUnikPerHari = {};
                         logsSeg.forEach(log => {
+                            logUnikPerHari[parseInt(log.dd)] = log;
+                        });
+
+                        let totHadir = 0, totTelat = 0, totCepat = 0, totIz = 0, totCt = 0, totSk = 0, totDl = 0;
+                        Object.values(logUnikPerHari).forEach(log => {
                             totHadir += (parseInt(log.hadir) || 0);
                             totTelat += (parseInt(log.terlambatMin) || 0);
                             totCepat += (parseInt(log.cepatPulangMin) || 0);
@@ -2033,6 +2043,8 @@ function periksaBackupOtomatis() {
                     yyyy = p3 < 100 ? p3 + 2000 : p3;
                 }
             }
+            return { yyyy, mm, dd };
+        }
 
         function prosesUploadLogMingguan(event) {
     const file = event.target.files[0];
