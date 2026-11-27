@@ -408,16 +408,21 @@ function sinkronkanLogHarianKeRekapAbsen(targetBulan, targetTahun) {
       if (yr > 0 && yr < 100) yr += 2000;
       const mm = parseInt(row[4]) || 0;
 
-      if (yr === tahun && mm === bulan) {
+      const dd = parseInt(row[5]) || 0;
+
+      if (yr === tahun && mm === bulan && dd > 0) {
         adaLogBulanIni = true;
-        if (!logMap[nip]) logMap[nip] = { hadir: 0, terlambat: 0, cepatPulang: 0, izin: 0, cuti: 0, sakit: 0, dinasLuar: 0 };
-        logMap[nip].hadir += (parseInt(row[6]) || 0);
-        logMap[nip].terlambat += (parseInt(row[7]) || 0);
-        logMap[nip].cepatPulang += (parseInt(row[8]) || 0);
-        logMap[nip].izin += (parseInt(row[9]) || 0);
-        logMap[nip].cuti += (parseInt(row[10]) || 0);
-        logMap[nip].sakit += (parseInt(row[11]) || 0);
-        logMap[nip].dinasLuar += (parseInt(row[12]) || 0);
+        if (!logMap[nip]) logMap[nip] = { harian: {} };
+        // Kunci per tanggal (dd) agar tanggal kembar di Log_Harian tidak dijumlahkan ganda
+        logMap[nip].harian[dd] = {
+          hadir: parseInt(row[6]) || 0,
+          terlambat: parseInt(row[7]) || 0,
+          cepatPulang: parseInt(row[8]) || 0,
+          izin: parseInt(row[9]) || 0,
+          cuti: parseInt(row[10]) || 0,
+          sakit: parseInt(row[11]) || 0,
+          dinasLuar: parseInt(row[12]) || 0
+        };
       }
     }
     if (!adaLogBulanIni) return null;
@@ -444,7 +449,18 @@ function sinkronkanLogHarianKeRekapAbsen(targetBulan, targetTahun) {
       const sekolah = String(pRow[2] || '').trim();
       if (!nip || !nama) continue;
 
-      const stat = logMap[nip] || { hadir: 0, terlambat: 0, cepatPulang: 0, izin: 0, cuti: 0, sakit: 0, dinasLuar: 0 };
+      const stat = { hadir: 0, terlambat: 0, cepatPulang: 0, izin: 0, cuti: 0, sakit: 0, dinasLuar: 0 };
+      if (logMap[nip] && logMap[nip].harian) {
+        Object.values(logMap[nip].harian).forEach(h => {
+          stat.hadir += h.hadir;
+          stat.terlambat += h.terlambat;
+          stat.cepatPulang += h.cepatPulang;
+          stat.izin += h.izin;
+          stat.cuti += h.cuti;
+          stat.sakit += h.sakit;
+          stat.dinasLuar += h.dinasLuar;
+        });
+      }
       const tanpaKet = Math.max(0, hariKerja - (stat.hadir + stat.izin + stat.cuti + stat.sakit + stat.dinasLuar));
       rowsRekap.push(["'" + nip, nama, sekolah, hariKerja, stat.hadir, stat.terlambat, stat.cepatPulang, stat.izin, stat.cuti, stat.sakit, stat.dinasLuar, tanpaKet]);
     }
